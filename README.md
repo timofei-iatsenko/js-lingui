@@ -1,7 +1,7 @@
 <div align="center">
 <h1>Lingui<sub>js</sub></h1>
 
-🌍📖 A readable, automated, and optimized (3 kb) internationalization for JavaScript
+🌍📖 A readable, automated, and optimized (2 kb) internationalization for JavaScript
 
 <hr />
 
@@ -31,7 +31,7 @@ Lingui is an easy yet powerful internationalization (i18n) framework for global 
 
 - **Unopinionated** - Integrate Lingui into your existing workflow. It supports message keys as well as auto-generated messages. Translations are stored either in JSON or standard PO files, which are supported in almost all translation tools.
 
-- **Lightweight and optimized** - Core library is less than [3 kB gzipped](https://bundlephobia.com/result?p=@lingui/core), React components are additional [1.4 kB gzipped](https://bundlephobia.com/result?p=@lingui/react).
+- **Lightweight and optimized** - Core library is less than [2 kB gzipped](https://bundlephobia.com/result?p=@lingui/core), React components are additional [1.4 kB gzipped](https://bundlephobia.com/result?p=@lingui/react).
 
 - **Active community** - Join the growing [community of developers](https://lingui.dev/community) who are using Lingui to build global products.
 
@@ -58,7 +58,10 @@ import { Trans } from "@lingui/react/macro"
 
 function App() {
   return (
-    <Trans id="msg.docs" /* id is optional */>
+    <Trans
+      id="msg.docs" // Optional message id
+      comment="Docs link on the website" // Comment for translators, optional
+    >
       Read the <a href="https://lingui.dev">documentation</a>
       for more info.
     </Trans>

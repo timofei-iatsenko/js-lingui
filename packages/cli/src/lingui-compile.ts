@@ -1,4 +1,4 @@
-import chalk from "chalk"
+import pico from "picocolors"
 import chokidar from "chokidar"
 import { program } from "commander"
 
@@ -6,16 +6,17 @@ import { getConfig, LinguiConfigNormalized } from "@lingui/conf"
 
 import { createCompiledCatalog } from "./api/compile"
 import { helpRun } from "./api/help"
-import { getCatalogs, getFormat } from "./api"
-import { TranslationMissingEvent } from "./api/catalog/getTranslationsForCatalog"
+import { createCompilationErrorMessage, getCatalogs, getFormat } from "./api"
 import { getCatalogForMerge } from "./api/catalog/getCatalogs"
 import normalizePath from "normalize-path"
 
 import nodepath from "path"
+import { Catalog } from "./api/catalog"
 
 export type CliCompileOptions = {
   verbose?: boolean
   allowEmpty?: boolean
+  failOnCompileError?: boolean
   typescript?: boolean
   watch?: boolean
   namespace?: string
@@ -35,25 +36,25 @@ export async function command(
 
   for (const locale of config.locales) {
     for (const catalog of catalogs) {
-      const missingMessages: TranslationMissingEvent[] = []
+      const { messages, missing: missingMessages } =
+        await catalog.getTranslations(locale, {
+          fallbackLocales: config.fallbackLocales,
+          sourceLocale: config.sourceLocale,
+        })
 
-      const messages = await catalog.getTranslations(locale, {
-        fallbackLocales: config.fallbackLocales,
-        sourceLocale: config.sourceLocale,
-        onMissing: (missing) => {
-          missingMessages.push(missing)
-        },
-      })
-
-      if (!options.allowEmpty && locale !== config.pseudoLocale && missingMessages.length > 0) {
+      if (
+        !options.allowEmpty &&
+        locale !== config.pseudoLocale &&
+        missingMessages.length > 0
+      ) {
         console.error(
-          chalk.red(
-            `Error: Failed to compile catalog for locale ${chalk.bold(locale)}!`
+          pico.red(
+            `Error: Failed to compile catalog for locale ${pico.bold(locale)}!`
           )
         )
 
         if (options.verbose) {
-          console.error(chalk.red("Missing translations:"))
+          console.error(pico.red("Missing translations:"))
           missingMessages.forEach((missing) => {
             const source =
               missing.source || missing.source === missing.id
@@ -64,7 +65,7 @@ export async function command(
           })
         } else {
           console.error(
-            chalk.red(`Missing ${missingMessages.length} translation(s)`)
+            pico.red(`Missing ${missingMessages.length} translation(s)`)
           )
         }
         console.error()
@@ -74,53 +75,74 @@ export async function command(
       if (doMerge) {
         mergedCatalogs = { ...mergedCatalogs, ...messages }
       } else {
-        const namespace = options.typescript
-          ? "ts"
-          : options.namespace || config.compileNamespace
-        const compiledCatalog = createCompiledCatalog(locale, messages, {
-          strict: false,
-          namespace,
-          pseudoLocale: config.pseudoLocale,
-          compilerBabelOptions: config.compilerBabelOptions,
-        })
-
-        let compiledPath = await catalog.writeCompiled(
-          locale,
-          compiledCatalog,
-          namespace
-        )
-
-        compiledPath = normalizePath(
-          nodepath.relative(config.rootDir, compiledPath)
-        )
-
-        options.verbose &&
-          console.error(chalk.green(`${locale} ⇒ ${compiledPath}`))
+        if (
+          !(await compileAndWrite(locale, config, options, catalog, messages))
+        ) {
+          return false
+        }
       }
     }
 
     if (doMerge) {
-      const compileCatalog = await getCatalogForMerge(config)
-      const namespace = options.namespace || config.compileNamespace
-      const compiledCatalog = createCompiledCatalog(locale, mergedCatalogs, {
-        strict: false,
-        namespace: namespace,
-        pseudoLocale: config.pseudoLocale,
-        compilerBabelOptions: config.compilerBabelOptions,
-      })
-      let compiledPath = await compileCatalog.writeCompiled(
+      const result = await compileAndWrite(
         locale,
-        compiledCatalog,
-        namespace
+        config,
+        options,
+        await getCatalogForMerge(config),
+        mergedCatalogs
       )
 
-      compiledPath = normalizePath(
-        nodepath.relative(config.rootDir, compiledPath)
-      )
-
-      options.verbose && console.log(chalk.green(`${locale} ⇒ ${compiledPath}`))
+      if (!result) {
+        return false
+      }
     }
   }
+  return true
+}
+
+async function compileAndWrite(
+  locale: string,
+  config: LinguiConfigNormalized,
+  options: CliCompileOptions,
+  catalogToWrite: Catalog,
+  messages: Record<string, string>
+) {
+  const namespace = options.typescript
+    ? "ts"
+    : options.namespace || config.compileNamespace
+  const { source: compiledCatalog, errors } = createCompiledCatalog(
+    locale,
+    messages,
+    {
+      strict: false,
+      namespace,
+      pseudoLocale: config.pseudoLocale,
+      compilerBabelOptions: config.compilerBabelOptions,
+    }
+  )
+
+  if (errors.length) {
+    let message = createCompilationErrorMessage(locale, errors)
+
+    if (options.failOnCompileError) {
+      message += `These errors fail command execution because \`--strict\` option passed`
+      console.error(pico.red(message))
+      return false
+    } else {
+      message += `You can fail command execution on these errors by passing \`--strict\` option`
+      console.error(pico.red(message))
+    }
+  }
+
+  let compiledPath = await catalogToWrite.writeCompiled(
+    locale,
+    compiledCatalog,
+    namespace
+  )
+
+  compiledPath = normalizePath(nodepath.relative(config.rootDir, compiledPath))
+
+  options.verbose && console.error(pico.green(`${locale} ⇒ ${compiledPath}`))
   return true
 }
 
@@ -178,6 +200,8 @@ if (require.main === module) {
       command(config, {
         verbose: options.watch || options.verbose || false,
         allowEmpty: !options.strict,
+        failOnCompileError: !!options.strict,
+
         typescript:
           options.typescript || config.compileNamespace === "ts" || false,
         namespace: options.namespace, // we want this to be undefined if user does not specify so default can be used
@@ -200,7 +224,7 @@ if (require.main === module) {
 
   // Check if Watch Mode is enabled
   if (options.watch) {
-    console.info(chalk.bold("Initializing Watch Mode..."))
+    console.info(pico.bold("Initializing Watch Mode..."))
     ;(async function initWatch() {
       const format = await getFormat(
         config.format,
@@ -226,7 +250,7 @@ if (require.main === module) {
       })
 
       const onReady = () => {
-        console.info(chalk.green.bold("Watcher is ready!"))
+        console.info(pico.green(pico.bold("Watcher is ready!")))
         watcher
           .on("add", () => dispatchCompile())
           .on("change", () => dispatchCompile())

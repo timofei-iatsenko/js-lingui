@@ -3,7 +3,7 @@ import type {
   LinguiConfig,
   LinguiConfigNormalized,
 } from "./types"
-import chalk from "chalk"
+import pico from "picocolors"
 import { replaceRootDir } from "./utils/replaceRootDir"
 import { multipleValidOptions, validate } from "jest-validate"
 import { setCldrParentLocales } from "./migrations/setCldrParentLocales"
@@ -20,6 +20,10 @@ export function makeConfig(
   let config: LinguiConfig = {
     ...defaultConfig,
     ...userConfig,
+    macro: {
+      ...defaultConfig.macro,
+      ...userConfig.macro,
+    },
   }
 
   if (!opts.skipValidation) {
@@ -66,6 +70,10 @@ export const defaultConfig: LinguiConfig = {
   pseudoLocale: "",
   rootDir: ".",
   runtimeConfigModule: ["@lingui/core", "i18n"],
+  macro: {
+    corePackage: ["@lingui/macro", "@lingui/core/macro"],
+    jsxPackage: ["@lingui/macro", "@lingui/react/macro"],
+  },
   sourceLocale: "",
   service: { name: "", apiKey: "" },
 }
@@ -88,7 +96,6 @@ export const exampleConfig = {
     flow: false,
     tsExperimentalDecorators: false,
   },
-
   experimental: {
     extractor: {
       entries: [],
@@ -110,9 +117,9 @@ function validateLocales(config: LinguiConfig) {
   if (!Array.isArray(config.locales) || !config.locales.length) {
     console.error("No locales defined!\n")
     console.error(
-      `Add ${chalk.yellow(
+      `Add ${pico.yellow(
         "'locales'"
-      )} to your configuration. See ${chalk.underline(
+      )} to your configuration. See ${pico.underline(
         "https://lingui.dev/ref/conf#locales"
       )}`
     )
