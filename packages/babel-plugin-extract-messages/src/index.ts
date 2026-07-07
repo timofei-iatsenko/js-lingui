@@ -1,3 +1,4 @@
+// eslint-disable-next-line import/no-duplicates
 import type * as BabelTypesNamespace from "@babel/types"
 import type {
   Expression,
@@ -5,9 +6,14 @@ import type {
   Node,
   ObjectExpression,
   ObjectProperty,
+  // eslint-disable-next-line import/no-duplicates
 } from "@babel/types"
 import type { PluginObj, PluginPass, NodePath } from "@babel/core"
 import type { Hub } from "@babel/traverse"
+import {
+  getConfig as loadConfig,
+  type LinguiConfigNormalized,
+} from "@lingui/conf"
 
 type BabelTypes = typeof BabelTypesNamespace
 
@@ -24,6 +30,7 @@ export type ExtractedMessage = {
 
 export type ExtractPluginOpts = {
   onMessageExtracted(msg: ExtractedMessage): void
+  linguiConfig?: LinguiConfigNormalized
 }
 
 type RawMessage = {
@@ -39,15 +46,15 @@ export type Origin = [filename: string, line: number, column?: number]
 function collectMessage(
   path: NodePath<any>,
   props: RawMessage,
-  ctx: PluginPass
+  ctx: PluginPass,
 ) {
   // prevent from adding undefined msgid
   if (props.id === undefined) return
 
   const node: Node = path.node
 
-  const line = node.loc ? node.loc.start.line : null
-  const column = node.loc ? node.loc.start.column : null
+  const line = node.loc ? node.loc.start.line : undefined
+  const column = node.loc ? node.loc.start.column : undefined
 
   ;(ctx.opts as ExtractPluginOpts).onMessageExtracted({
     id: props.id,
@@ -55,7 +62,9 @@ function collectMessage(
     context: props.context,
     comment: props.comment,
     placeholders: props.placeholders || {},
-    origin: [ctx.file.opts.filename, line, column],
+    origin: ctx.file.opts.filename
+      ? ([ctx.file.opts.filename, line, column] as Origin)
+      : undefined,
   })
 }
 
@@ -63,7 +72,7 @@ function getTextFromExpression(
   t: BabelTypes,
   exp: Expression,
   hub: Hub,
-  emitErrorOnVariable = true
+  emitErrorOnVariable = true,
 ): string {
   if (t.isStringLiteral(exp)) {
     return exp.value
@@ -75,13 +84,13 @@ function getTextFromExpression(
         t,
         exp.left as Expression,
         hub,
-        emitErrorOnVariable
+        emitErrorOnVariable,
       ) +
       getTextFromExpression(
         t,
         exp.right as Expression,
         hub,
-        emitErrorOnVariable
+        emitErrorOnVariable,
       )
     )
   }
@@ -92,13 +101,13 @@ function getTextFromExpression(
         hub.buildError(
           exp,
           "Could not extract from template literal with expressions.",
-          SyntaxError
-        ).message
+          SyntaxError,
+        ).message,
       )
       return ""
     }
 
-    return exp.quasis[0]?.value?.cooked
+    return exp.quasis[0]?.value?.cooked || ""
   }
 
   if (emitErrorOnVariable) {
@@ -106,25 +115,27 @@ function getTextFromExpression(
       hub.buildError(
         exp,
         "Only strings or template literals could be extracted.",
-        SyntaxError
-      ).message
+        SyntaxError,
+      ).message,
     )
   }
+
+  return ""
 }
 
 function getNodeSource(fileContents: string, node: Node) {
-  return fileContents.slice(node.start, node.end)
+  return fileContents.slice(node.start!, node.end!)
 }
 
 function valuesObjectExpressionToPlaceholdersRecord(
   t: BabelTypes,
   exp: ObjectExpression,
-  hub: Hub
+  hub: Hub,
 ) {
   const props: Record<string, string> = {}
 
   ;(exp.properties as ObjectProperty[]).forEach(({ key, value }, i) => {
-    let name: string
+    let name: string | undefined
 
     if (t.isStringLiteral(key) || t.isNumericLiteral(key)) {
       name = key.value.toString()
@@ -135,13 +146,13 @@ function valuesObjectExpressionToPlaceholdersRecord(
         hub.buildError(
           exp,
           `Could not extract values to placeholders. The key #${i} has unsupported syntax`,
-          SyntaxError
-        ).message
+          SyntaxError,
+        ).message,
       )
     }
 
     if (name) {
-      props[name] = getNodeSource(hub.getCode(), value)
+      props[name] = getNodeSource(hub.getCode()!, value)
     }
   })
 
@@ -151,26 +162,29 @@ function valuesObjectExpressionToPlaceholdersRecord(
 function extractFromObjectExpression(
   t: BabelTypes,
   exp: ObjectExpression,
-  hub: Hub
+  hub: Hub,
 ) {
   const props: RawMessage = {}
 
   const textKeys = ["id", "message", "comment", "context"] as const
 
-  ;(exp.properties as ObjectProperty[]).forEach(({ key, value }, i) => {
+  exp.properties.forEach((prop, i) => {
+    if (prop.type !== "ObjectProperty") return
+    const { key, value } = prop
+
     const name = (key as Identifier).name
 
     if (name === "values" && t.isObjectExpression(value)) {
       props.placeholders = valuesObjectExpressionToPlaceholdersRecord(
         t,
         value,
-        hub
+        hub,
       )
     } else if (textKeys.includes(name as any)) {
       props[name as (typeof textKeys)[number]] = getTextFromExpression(
         t,
         value as Expression,
-        hub
+        hub,
       )
     }
   })
@@ -181,10 +195,7 @@ function extractFromObjectExpression(
 const I18N_OBJECT = "i18n"
 
 function hasComment(node: Node, comment: string): boolean {
-  return (
-    node.leadingComments &&
-    node.leadingComments.some((comm) => comm.value.trim() === comment)
-  )
+  return !!node.leadingComments?.some((comm) => comm.value.trim() === comment)
 }
 
 function hasIgnoreComment(node: Node): boolean {
@@ -192,17 +203,36 @@ function hasIgnoreComment(node: Node): boolean {
 }
 
 function hasI18nComment(node: Node): boolean {
-  return hasComment(node, "i18n")
+  return !!node.leadingComments?.some((comm) => {
+    const trimmed = comm.value.trim()
+
+    return trimmed === "i18n" || trimmed === "* i18n" || trimmed === "*i18n"
+  })
+}
+
+function getLinguiConfig(ctx: PluginPass): LinguiConfigNormalized {
+  const { linguiConfig } = ctx.opts as ExtractPluginOpts
+  if (linguiConfig) return linguiConfig
+
+  const loadedConfig = ctx.get("linguiConfig") as
+    LinguiConfigNormalized | undefined
+  if (loadedConfig) return loadedConfig
+
+  const config = loadConfig()
+  ctx.set("linguiConfig", config)
+  return config
 }
 
 export default function ({ types: t }: { types: BabelTypes }): PluginObj {
-  function isTransComponent(path: NodePath) {
+  function isTransComponent(path: NodePath, config: LinguiConfigNormalized) {
+    const [moduleName, importName] = config.runtimeConfigModule.Trans
+
     return (
       path.isJSXElement() &&
       path
         .get("openingElement")
         .get("name")
-        .referencesImport("@lingui/react", "Trans")
+        .referencesImport(moduleName, importName)
     )
   }
 
@@ -216,13 +246,22 @@ export default function ({ types: t }: { types: BabelTypes }): PluginObj {
 
   const extractFromMessageDescriptor = (
     path: NodePath<ObjectExpression>,
-    ctx: PluginPass
+    ctx: PluginPass,
   ) => {
     const props = extractFromObjectExpression(t, path.node, ctx.file.hub)
 
     if (!props.id) {
+      // The id may be provided by a spread element (e.g. `i18n._({ ...msg })`),
+      // which can't be resolved statically. Skip silently instead of warning.
+      const hasSpread = path.node.properties.some((prop) =>
+        t.isSpreadElement(prop),
+      )
+      if (hasSpread) {
+        return
+      }
+
       console.warn(
-        path.buildCodeFrameError("Missing message ID, skipping.").message
+        path.buildCodeFrameError("Missing message ID, skipping.").message,
       )
       return
     }
@@ -235,14 +274,15 @@ export default function ({ types: t }: { types: BabelTypes }): PluginObj {
       // Extract translation from <Trans /> component.
       JSXElement(path, ctx) {
         const { node } = path
-        if (!isTransComponent(path)) return
+        const linguiConfig = getLinguiConfig(ctx)
+        if (!isTransComponent(path, linguiConfig)) return
 
         const attrs = node.openingElement.attributes || []
 
         if (
           attrs.find(
             (attr) =>
-              t.isJSXSpreadAttribute(attr) && hasI18nComment(attr.argument)
+              t.isJSXSpreadAttribute(attr) && hasI18nComment(attr.argument),
           )
         ) {
           return
@@ -278,7 +318,7 @@ export default function ({ types: t }: { types: BabelTypes }): PluginObj {
             acc.placeholders = valuesObjectExpressionToPlaceholdersRecord(
               t,
               item.value.expression,
-              ctx.file.hub
+              ctx.file.hub,
             )
           }
 
@@ -288,11 +328,11 @@ export default function ({ types: t }: { types: BabelTypes }): PluginObj {
         if (!props.id) {
           // <Trans id={message} /> is valid, don't raise warning
           const idProp = attrs.filter(
-            (item) => t.isJSXAttribute(item) && item.name.name === "id"
+            (item) => t.isJSXAttribute(item) && item.name.name === "id",
           )[0]
           if (idProp === undefined || t.isLiteral(props.id as any)) {
             console.warn(
-              path.buildCodeFrameError("Missing message ID, skipping.").message
+              path.buildCodeFrameError("Missing message ID, skipping.").message,
             )
           }
           return
@@ -314,7 +354,7 @@ export default function ({ types: t }: { types: BabelTypes }): PluginObj {
         }
 
         // call with explicit annotation
-        // i18n._(/*i18n*/ {descriptor})
+        // i18n._(/**i18n*/ {descriptor})
         // skipping this as it is processed
         // by ObjectExpression visitor
         if (hasI18nComment(firstArgument.node)) {
@@ -332,7 +372,7 @@ export default function ({ types: t }: { types: BabelTypes }): PluginObj {
               t,
               firstArgument.node as Expression,
               ctx.file.hub,
-              false
+              false,
             ),
           }
 
@@ -345,7 +385,7 @@ export default function ({ types: t }: { types: BabelTypes }): PluginObj {
             props.placeholders = valuesObjectExpressionToPlaceholdersRecord(
               t,
               secondArgument,
-              ctx.file.hub
+              ctx.file.hub,
             )
           }
 
@@ -373,7 +413,7 @@ export default function ({ types: t }: { types: BabelTypes }): PluginObj {
 
         if (!props.id) {
           console.warn(
-            path.buildCodeFrameError("Empty StringLiteral, skipping.").message
+            path.buildCodeFrameError("Empty StringLiteral, skipping.").message,
           )
           return
         }

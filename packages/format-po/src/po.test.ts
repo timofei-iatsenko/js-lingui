@@ -2,7 +2,6 @@ import fs from "fs"
 import path from "path"
 
 import { CatalogFormatter, CatalogType } from "@lingui/conf"
-import MockDate from "mockdate"
 import { formatter as createFormatter, POCatalogExtra } from "./po"
 
 const defaultParseCtx: Parameters<CatalogFormatter["parse"]>[1] = {
@@ -13,19 +12,16 @@ const defaultParseCtx: Parameters<CatalogFormatter["parse"]>[1] = {
 
 const defaultSerializeCtx: Parameters<CatalogFormatter["serialize"]>[1] = {
   locale: "en",
-  existing: null,
+  existing: undefined,
   filename: "file.po",
   sourceLocale: "en",
 }
 
 describe("pofile format", () => {
   beforeAll(() => {
-    MockDate.set(new Date("2018-08-27T10:00Z"))
+    vi.setSystemTime(new Date("2018-08-27T10:00Z"))
   })
 
-  afterAll(() => {
-    MockDate.reset()
-  })
   it("should write catalog in pofile format", () => {
     const format = createFormatter({ origins: true })
 
@@ -131,6 +127,46 @@ describe("pofile format", () => {
     expect(actual).toMatchObject(catalog)
   })
 
+  it("should print source message as translation for source locale catalog for explicit id", () => {
+    const format = createFormatter({ origins: true })
+
+    const catalog: CatalogType = {
+      "custom.id": {
+        message: "with custom id",
+        translation: "",
+        context: "my context",
+      },
+      Dgzql1: {
+        message: "with generated id",
+        translation: "",
+        context: "my context",
+      },
+    }
+    expect(
+      format.serialize(catalog, {
+        ...defaultSerializeCtx,
+        sourceLocale: "en",
+        locale: "en",
+      }),
+    ).toMatchSnapshot("source locale catalog")
+
+    expect(
+      format.serialize(catalog, {
+        ...defaultSerializeCtx,
+        sourceLocale: "en",
+        locale: undefined,
+      }),
+    ).toMatchSnapshot("template locale catalog")
+
+    expect(
+      format.serialize(catalog, {
+        ...defaultSerializeCtx,
+        sourceLocale: "en",
+        locale: "pl",
+      }),
+    ).toMatchSnapshot("target locale catalog")
+  })
+
   describe("explicitIdAsDefault", () => {
     const catalog: CatalogType = {
       // with generated id
@@ -154,11 +190,11 @@ describe("pofile format", () => {
 
       const serialized = format.serialize(
         catalog,
-        defaultSerializeCtx
+        defaultSerializeCtx,
       ) as string
 
       expect(serialized).toMatchInlineSnapshot(`
-        msgid ""
+        "msgid ""
         msgstr ""
         "POT-Creation-Date: 2018-08-27 10:00+0000\\n"
         "MIME-Version: 1.0\\n"
@@ -173,37 +209,35 @@ describe("pofile format", () => {
         msgstr ""
 
         msgid "custom.id"
-        msgstr ""
-
+        msgstr "with explicit id"
+        "
       `)
 
       const actual = format.parse(serialized, defaultParseCtx)
       expect(actual).toMatchInlineSnapshot(`
         {
-          Dgzql1: {
-            comments: [
-              js-lingui-generated-id,
-            ],
-            context: my context,
-            extra: {
-              flags: [],
-              translatorComments: [],
+          "Dgzql1": {
+            "comments": [],
+            "context": "my context",
+            "extra": {
+              "flags": [],
+              "translatorComments": [],
             },
-            message: with generated id,
-            obsolete: false,
-            origin: [],
-            translation: ,
+            "message": "with generated id",
+            "obsolete": false,
+            "origin": [],
+            "translation": "",
           },
-          custom.id: {
-            comments: [],
-            context: null,
-            extra: {
-              flags: [],
-              translatorComments: [],
+          "custom.id": {
+            "comments": [],
+            "context": undefined,
+            "extra": {
+              "flags": [],
+              "translatorComments": [],
             },
-            obsolete: false,
-            origin: [],
-            translation: ,
+            "obsolete": false,
+            "origin": [],
+            "translation": "with explicit id",
           },
         }
       `)
@@ -217,11 +251,11 @@ describe("pofile format", () => {
 
       const serialized = format.serialize(
         catalog,
-        defaultSerializeCtx
+        defaultSerializeCtx,
       ) as string
 
       expect(serialized).toMatchInlineSnapshot(`
-        msgid ""
+        "msgid ""
         msgstr ""
         "POT-Creation-Date: 2018-08-27 10:00+0000\\n"
         "MIME-Version: 1.0\\n"
@@ -236,37 +270,35 @@ describe("pofile format", () => {
 
         #. js-lingui-explicit-id
         msgid "custom.id"
-        msgstr ""
-
+        msgstr "with explicit id"
+        "
       `)
 
       const actual = format.parse(serialized, defaultParseCtx)
       expect(actual).toMatchInlineSnapshot(`
         {
-          Dgzql1: {
-            comments: [],
-            context: my context,
-            extra: {
-              flags: [],
-              translatorComments: [],
+          "Dgzql1": {
+            "comments": [],
+            "context": "my context",
+            "extra": {
+              "flags": [],
+              "translatorComments": [],
             },
-            message: with generated id,
-            obsolete: false,
-            origin: [],
-            translation: ,
+            "message": "with generated id",
+            "obsolete": false,
+            "origin": [],
+            "translation": "",
           },
-          custom.id: {
-            comments: [
-              js-lingui-explicit-id,
-            ],
-            context: null,
-            extra: {
-              flags: [],
-              translatorComments: [],
+          "custom.id": {
+            "comments": [],
+            "context": undefined,
+            "extra": {
+              "flags": [],
+              "translatorComments": [],
             },
-            obsolete: false,
-            origin: [],
-            translation: ,
+            "obsolete": false,
+            "origin": [],
+            "translation": "with explicit id",
           },
         }
       `)
@@ -378,7 +410,7 @@ describe("pofile format", () => {
     const actual = format.serialize(catalog, defaultSerializeCtx)
 
     expect(actual).toMatchInlineSnapshot(`
-      msgid ""
+      "msgid ""
       msgstr ""
       "POT-Creation-Date: 2018-08-27 10:00+0000\\n"
       "MIME-Version: 1.0\\n"
@@ -401,7 +433,7 @@ describe("pofile format", () => {
       #: src/Component.js
       msgid "withMultipleOrigins"
       msgstr "Message with multiple origin"
-
+      "
     `)
   })
 
@@ -425,7 +457,7 @@ describe("pofile format", () => {
     const actual = format.serialize(catalog, defaultSerializeCtx)
 
     expect(actual).toMatchInlineSnapshot(`
-      msgid ""
+      "msgid ""
       msgstr ""
       "POT-Creation-Date: 2018-08-27 10:00+0000\\n"
       "MIME-Version: 1.0\\n"
@@ -448,7 +480,44 @@ describe("pofile format", () => {
       #: src/Component.js
       msgid "withMultipleOrigins"
       msgstr "Message with multiple origin"
+      "
+    `)
+  })
 
+  it("should deduplicate file references when lineNumbers option is false", () => {
+    const format = createFormatter({ origins: true, lineNumbers: false })
+
+    const catalog: CatalogType = {
+      withDuplicateOrigins: {
+        translation: "Message with duplicate origins",
+        origin: [
+          ["src/App.js", 4],
+          ["src/App.js", 20],
+          ["src/Component.js", 2],
+          ["src/App.js", 55],
+          ["src/Component.js", 8],
+        ],
+      },
+    }
+
+    const actual = format.serialize(catalog, defaultSerializeCtx)
+
+    expect(actual).toMatchInlineSnapshot(`
+      "msgid ""
+      msgstr ""
+      "POT-Creation-Date: 2018-08-27 10:00+0000\\n"
+      "MIME-Version: 1.0\\n"
+      "Content-Type: text/plain; charset=utf-8\\n"
+      "Content-Transfer-Encoding: 8bit\\n"
+      "X-Generator: @lingui/cli\\n"
+      "Language: en\\n"
+
+      #. js-lingui-explicit-id
+      #: src/App.js
+      #: src/Component.js
+      msgid "withDuplicateOrigins"
+      msgstr "Message with duplicate origins"
+      "
     `)
   })
 
@@ -460,7 +529,7 @@ describe("pofile format", () => {
     const actual = format.serialize(catalog, defaultSerializeCtx)
 
     expect(actual).toMatchInlineSnapshot(`
-      msgid ""
+      "msgid ""
       msgstr ""
       "POT-Creation-Date: 2018-08-27 10:00+0000\\n"
       "MIME-Version: 1.0\\n"
@@ -469,8 +538,66 @@ describe("pofile format", () => {
       "X-Generator: @lingui/cli\\n"
       "Language: en\\n"
       "X-Custom-Attribute: custom-value\\n"
-
+      "
     `)
+  })
+
+  describe("foldLength", () => {
+    it("should not fold by default", () => {
+      const format = createFormatter()
+
+      const catalog: CatalogType = {
+        veryLongString: {
+          translation:
+            "One morning, when Gregor Samsa woke from troubled dreams, he found himself transformed in his bed into a horrible vermin.",
+        },
+      }
+
+      const actual = format.serialize(catalog, defaultSerializeCtx)
+      expect(actual).toMatchSnapshot()
+    })
+
+    it("should fold at custom length", () => {
+      const format = createFormatter({ foldLength: 40 })
+
+      const catalog: CatalogType = {
+        veryLongString: {
+          translation:
+            "One morning, when Gregor Samsa woke from troubled dreams, he found himself transformed in his bed into a horrible vermin.",
+        },
+      }
+
+      const actual = format.serialize(catalog, defaultSerializeCtx)
+      expect(actual).toMatchSnapshot()
+    })
+  })
+
+  describe("compactMultiline", () => {
+    it("should use non-compact format when compactMultiline is false", () => {
+      const format = createFormatter({ compactMultiline: false })
+
+      const catalog: CatalogType = {
+        multiline: {
+          translation: "First line\nSecond line\nThird line",
+        },
+      }
+
+      const actual = format.serialize(catalog, defaultSerializeCtx)
+      expect(actual).toMatchSnapshot()
+    })
+
+    it("should use compact format when compactMultiline is true", () => {
+      const format = createFormatter({ compactMultiline: true })
+
+      const catalog: CatalogType = {
+        multiline: {
+          translation: "First line\nSecond line\nThird line",
+        },
+      }
+
+      const actual = format.serialize(catalog, defaultSerializeCtx)
+      expect(actual).toMatchSnapshot()
+    })
   })
 
   describe("printPlaceholdersInComments", () => {
@@ -512,6 +639,14 @@ describe("pofile format", () => {
           placeholders: {
             0: ["userName", "user.name", "profile.name", "authorName"],
           },
+        },
+
+        // Should not erase existing comments if message does not have placeholder
+        // https://github.com/lingui/js-lingui/issues/2542
+        static5: {
+          message: "Static message {0}",
+          comments: ["placeholder: {0} = getValue()"],
+          translation: "Static message {0}",
         },
       }
 

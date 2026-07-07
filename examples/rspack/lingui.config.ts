@@ -1,13 +1,10 @@
-import { LinguiConfig } from '@lingui/conf'
+import { defineConfig } from '@lingui/cli'
 
-const config: Partial<LinguiConfig> = {
+export default defineConfig({
     locales: ["en", "fr"],
     sourceLocale: "en",
     catalogs: [{
         path: "src/locales/{locale}/messages",
         include: ["src"]
     }],
-    format: "po"
-};
-
-export default config;
+});

@@ -1,15 +1,44 @@
-import extractTemplateCommand from "../src/lingui-extract-template"
-import extractCommand from "../src/lingui-extract"
-import extractExperimentalCommand from "../src/lingui-extract-experimental"
-import { command as compileCommand } from "../src/lingui-compile"
+import extractTemplateCommand from "../src/lingui-extract-template.js"
+import extractCommand from "../src/lingui-extract.js"
+import extractExperimentalCommand from "../src/lingui-extract-experimental.js"
+import { command as compileCommand } from "../src/lingui-compile.js"
 import fs from "fs/promises"
-import { sync } from "glob"
+import { globSync } from "node:fs"
 import nodepath from "path"
-import { makeConfig } from "@lingui/conf"
-import { compareFolders } from "../src/tests"
-import { getConsoleMockCalls, mockConsole } from "@lingui/jest-mocks"
-import MockDate from "mockdate"
+import { getConfig, makeConfig } from "@lingui/conf"
+import { compareFolders } from "../src/tests.js"
+import { getConsoleMockCalls, mockConsole } from "@lingui/test-utils"
+import { vi } from "vitest"
 
+vi.mock("ora", () => {
+  return {
+    default: () => {
+      return {
+        start(...args: any) {
+          console.log(args)
+        },
+        succeed(...args: any) {
+          console.log(args)
+        },
+        fail(...args: any) {
+          console.log(args)
+        },
+        warn(...args: any) {
+          console.log(args)
+        },
+      }
+    },
+  }
+})
+
+function replaceDuration(snapshot: string | undefined) {
+  if (!snapshot) return ""
+  return snapshot
+    .replace(/Done in .+/g, "Done in <T>")
+    .replace(/\(\d+ms\)/g, "(<T>)")
+    .replace(/in \d+ms/g, "in <T>")
+    .replace(/in \d+s/g, "in <T>")
+}
 async function prepare(caseFolderName: string) {
   const rootDir = nodepath.join(__dirname, caseFolderName)
 
@@ -22,26 +51,28 @@ async function prepare(caseFolderName: string) {
     force: true,
   })
 
-  if (sync(existingPath).length === 1) {
+  if (globSync(existingPath).length === 1) {
     await fs.cp(existingPath, actualPath, { recursive: true })
   }
 
   return { rootDir, actualPath, existingPath, expectedPath }
 }
 
+const defaultOptions = {
+  workersOptions: { poolSize: 0 },
+  clean: false,
+  verbose: false,
+  overwrite: false,
+}
+
 describe("E2E Extractor Test", () => {
   beforeAll(() => {
-    MockDate.set(new Date("2023-03-15T10:00Z"))
-  })
-
-  afterAll(() => {
-    MockDate.reset()
+    vi.setSystemTime(new Date("2023-03-15T10:00Z"))
   })
 
   it("Should collect messages from files and write catalog in PO format", async () => {
-    const { rootDir, actualPath, expectedPath } = await prepare(
-      "extract-po-format"
-    )
+    const { rootDir, actualPath, expectedPath } =
+      await prepare("extract-po-format")
 
     await mockConsole(async (console) => {
       const result = await extractCommand(
@@ -49,7 +80,7 @@ describe("E2E Extractor Test", () => {
           rootDir: rootDir,
           locales: ["en", "pl"],
           sourceLocale: "en",
-          format: "po",
+
           catalogs: [
             {
               path: "<rootDir>/actual/{locale}",
@@ -57,23 +88,25 @@ describe("E2E Extractor Test", () => {
             },
           ],
         }),
-        {}
+        defaultOptions,
       )
 
       expect(result).toBeTruthy()
       expect(getConsoleMockCalls(console.error)).toBeFalsy()
-      expect(getConsoleMockCalls(console.log)).toMatchInlineSnapshot(`
-        Catalog statistics for actual/{locale}: 
-        ┌─────────────┬─────────────┬─────────┐
-        │ Language    │ Total count │ Missing │
-        ├─────────────┼─────────────┼─────────┤
-        │ en (source) │     10      │    -    │
-        │ pl          │     10      │   10    │
-        └─────────────┴─────────────┴─────────┘
+      expect(replaceDuration(getConsoleMockCalls(console.log)))
+        .toMatchInlineSnapshot(`
+          Done in <T>
+          Catalog statistics for actual/{locale}: 
+          ┌─────────────┬─────────────┬─────────┐
+          │ Language    │ Total count │ Missing │
+          ├─────────────┼─────────────┼─────────┤
+          │ en (source) │     10      │    -    │
+          │ pl          │     10      │   10    │
+          └─────────────┴─────────────┴─────────┘
 
-        (Use "yarn extract" to update catalogs with new messages.)
-        (Use "yarn compile" to compile catalogs for production. Alternatively, use bundler plugins: https://lingui.dev/ref/cli#compiling-catalogs-in-ci)
-      `)
+          (Use "yarn extract" to update catalogs with new messages.)
+          (Use "yarn compile" to compile catalogs for production. Alternatively, use bundler plugins: https://lingui.dev/ref/cli#compiling-catalogs-in-ci)
+        `)
     })
 
     compareFolders(actualPath, expectedPath)
@@ -81,7 +114,7 @@ describe("E2E Extractor Test", () => {
 
   it("extractTemplate should extract into .pot template", async () => {
     const { rootDir, actualPath, expectedPath } = await prepare(
-      "extract-template-po-format"
+      "extract-template-po-format",
     )
 
     await fs.rm(actualPath, {
@@ -90,21 +123,9 @@ describe("E2E Extractor Test", () => {
     })
 
     await mockConsole(async (console) => {
-      const result = await extractTemplateCommand(
-        makeConfig({
-          rootDir: rootDir,
-          locales: ["en", "pl"],
-          sourceLocale: "en",
-          format: "po",
-          catalogs: [
-            {
-              path: "<rootDir>/actual/{locale}",
-              include: ["<rootDir>/fixtures"],
-            },
-          ],
-        }),
-        {}
-      )
+      const result = await extractTemplateCommand(getConfig({ cwd: rootDir }), {
+        workersOptions: { poolSize: 0 },
+      })
 
       expect(result).toBeTruthy()
       expect(getConsoleMockCalls(console.error)).toBeFalsy()
@@ -117,49 +138,118 @@ describe("E2E Extractor Test", () => {
     compareFolders(actualPath, expectedPath)
   })
 
+  it("extractTemplate should extract into .pot template with worker pool", async () => {
+    const { rootDir, actualPath, expectedPath } = await prepare(
+      "extract-template-po-format",
+    )
+
+    await fs.rm(actualPath, {
+      recursive: true,
+      force: true,
+    })
+
+    await mockConsole(async (console) => {
+      const result = await extractTemplateCommand(getConfig({ cwd: rootDir }), {
+        workersOptions: { poolSize: 2 },
+        verbose: true,
+      })
+
+      expect(result).toBeTruthy()
+      expect(getConsoleMockCalls(console.error)).toBeFalsy()
+      expect(getConsoleMockCalls(console.log)).toMatchInlineSnapshot(`
+        Extracting messages from source files…
+        Use worker pool of size 2
+        Catalog statistics for actual/messages.pot: 7 messages
+
+      `)
+    })
+
+    compareFolders(actualPath, expectedPath)
+  })
+
+  it("Should extract with multiThread enabled", async () => {
+    const { rootDir, actualPath, expectedPath } =
+      await prepare("extract-po-format")
+
+    await mockConsole(async (console) => {
+      const result = await extractCommand(getConfig({ cwd: rootDir }), {
+        ...defaultOptions,
+        verbose: true,
+        workersOptions: { poolSize: 2 },
+      })
+
+      expect(result).toBeTruthy()
+      expect(getConsoleMockCalls(console.error)).toBeFalsy()
+      expect(replaceDuration(getConsoleMockCalls(console.log)))
+        .toMatchInlineSnapshot(`
+          Extracting messages from source files…
+          Use worker pool of size 2
+
+          Done in <T>
+          Catalog statistics for actual/{locale}: 
+          ┌─────────────┬─────────────┬─────────┐
+          │ Language    │ Total count │ Missing │
+          ├─────────────┼─────────────┼─────────┤
+          │ en (source) │     10      │    -    │
+          │ pl          │     10      │   10    │
+          └─────────────┴─────────────┴─────────┘
+
+          (Use "yarn extract" to update catalogs with new messages.)
+          (Use "yarn compile" to compile catalogs for production. Alternatively, use bundler plugins: https://lingui.dev/ref/cli#compiling-catalogs-in-ci)
+        `)
+    })
+
+    compareFolders(actualPath, expectedPath)
+  })
+
   describe("extractor-experimental", () => {
     it("should extract to template when --template passed", async () => {
       const { rootDir, actualPath, expectedPath } = await prepare(
-        "extractor-experimental-template"
+        "extractor-experimental-template",
       )
 
-      await mockConsole(async (console) => {
-        const config = makeConfig({
-          rootDir: rootDir,
-          locales: ["en", "pl"],
-          sourceLocale: "en",
-          format: "po",
-          catalogs: [],
-          experimental: {
-            extractor: {
-              entries: ["<rootDir>/fixtures/pages/**/*.page.{ts,tsx}"],
-              output: "<rootDir>/actual/{entryName}.{locale}",
-            },
-          },
-        })
+      const config = getConfig({ cwd: rootDir })
 
+      await mockConsole(async (console) => {
         const result = await extractExperimentalCommand(config, {
           template: true,
+          workersOptions: {
+            poolSize: 0,
+          },
         })
 
         await compileCommand(config, {
           allowEmpty: true,
+          workersOptions: {
+            poolSize: 0,
+          },
         })
 
         expect(getConsoleMockCalls(console.error)).toBeFalsy()
         expect(result).toBeTruthy()
-        expect(getConsoleMockCalls(console.log)).toMatchInlineSnapshot(`
-          You have using an experimental feature
-          Experimental features are not covered by semver, and may cause unexpected or broken application behavior. Use at your own risk.
+        expect(replaceDuration(getConsoleMockCalls(console.log)))
+          .toMatchInlineSnapshot(`
+            You have using an experimental feature
+            Experimental features are not covered by semver, and may cause unexpected or broken application behavior. Use at your own risk.
 
-          Catalog statistics for fixtures/pages/index.page.ts:
-          1 message(s) extracted
+            Resolving entry points...
+            Found 2 entry point(s) (<T>): fixtures/pages/index.page.ts, fixtures/pages/about.page.tsx
+            Bundling...
+            Bundling done (<T>)
+            Extracting messages...
+            Extracting done (<T>)
+            Writing catalogs...
+            Writing catalogs done (<T>)
+            Catalog statistics for fixtures/pages/about.page.tsx:
+            5 message(s) extracted
 
-          Catalog statistics for fixtures/pages/about.page.tsx:
-          4 message(s) extracted
+            Catalog statistics for fixtures/pages/index.page.ts:
+            1 message(s) extracted
 
-          Compiling message catalogs…
-        `)
+            Extraction completed successfully in <T>
+            Compiling message catalogs…
+            Done in <T>
+          `)
       })
 
       compareFolders(actualPath, expectedPath)
@@ -167,28 +257,140 @@ describe("E2E Extractor Test", () => {
 
     it("should extract to catalogs and merge with existing", async () => {
       const { rootDir, actualPath, expectedPath } = await prepare(
-        "extractor-experimental"
+        "extractor-experimental",
       )
 
       await mockConsole(async (console) => {
-        const config = makeConfig({
-          rootDir: rootDir,
-          locales: ["en", "pl"],
-          sourceLocale: "en",
-          format: "po",
-          catalogs: [],
-          experimental: {
-            extractor: {
-              entries: ["<rootDir>/fixtures/pages/**/*.page.{ts,tsx}"],
-              output: "<rootDir>/actual/{entryName}.{locale}",
-            },
+        const config = getConfig({ cwd: rootDir })
+
+        const result = await extractExperimentalCommand(config, {
+          workersOptions: {
+            poolSize: 0,
           },
         })
 
-        const result = await extractExperimentalCommand(config, {})
+        await compileCommand(config, {
+          allowEmpty: true,
+          workersOptions: {
+            poolSize: 0,
+          },
+        })
+
+        expect(getConsoleMockCalls(console.error)).toBeFalsy()
+        expect(result).toBeTruthy()
+        expect(replaceDuration(getConsoleMockCalls(console.log)))
+          .toMatchInlineSnapshot(`
+            You have using an experimental feature
+            Experimental features are not covered by semver, and may cause unexpected or broken application behavior. Use at your own risk.
+
+            Resolving entry points...
+            Found 2 entry point(s) (<T>): fixtures/pages/about.page.ts, fixtures/pages/index.page.ts
+            Bundling...
+            Bundling done (<T>)
+            Extracting messages...
+            Extracting done (<T>)
+            Writing catalogs...
+            Writing catalogs done (<T>)
+            Catalog statistics for fixtures/pages/about.page.ts:
+            ┌─────────────┬─────────────┬─────────┐
+            │ Language    │ Total count │ Missing │
+            ├─────────────┼─────────────┼─────────┤
+            │ en (source) │      5      │    -    │
+            │ pl          │      6      │    5    │
+            └─────────────┴─────────────┴─────────┘
+
+            Catalog statistics for fixtures/pages/index.page.ts:
+            ┌─────────────┬─────────────┬─────────┐
+            │ Language    │ Total count │ Missing │
+            ├─────────────┼─────────────┼─────────┤
+            │ en (source) │      5      │    -    │
+            │ pl          │      5      │    5    │
+            └─────────────┴─────────────┴─────────┘
+
+            Extraction completed successfully in <T>
+            Compiling message catalogs…
+            Done in <T>
+          `)
+      })
+
+      compareFolders(actualPath, expectedPath)
+    })
+
+    it("should extract to catalogs with worker pool", async () => {
+      const { rootDir, actualPath, expectedPath } = await prepare(
+        "extractor-experimental",
+      )
+
+      await mockConsole(async (console) => {
+        const config = getConfig({ cwd: rootDir })
+
+        const result = await extractExperimentalCommand(config, {
+          verbose: true,
+          workersOptions: {
+            poolSize: 2,
+          },
+        })
 
         await compileCommand(config, {
           allowEmpty: true,
+          workersOptions: {
+            poolSize: 0,
+          },
+        })
+
+        expect(getConsoleMockCalls(console.error)).toBeFalsy()
+        expect(result).toBeTruthy()
+        expect(replaceDuration(getConsoleMockCalls(console.log)))
+          .toMatchInlineSnapshot(`
+            You have using an experimental feature
+            Experimental features are not covered by semver, and may cause unexpected or broken application behavior. Use at your own risk.
+
+            Resolving entry points...
+            Found 2 entry point(s) (<T>): fixtures/pages/about.page.ts, fixtures/pages/index.page.ts
+            Bundling...
+            Bundling done (<T>)
+            Extracting messages...
+            Use worker pool of size 2
+            Extracting done (<T>)
+            Writing catalogs...
+            Writing catalogs done (<T>)
+            Catalog statistics for fixtures/pages/about.page.ts:
+            ┌─────────────┬─────────────┬─────────┐
+            │ Language    │ Total count │ Missing │
+            ├─────────────┼─────────────┼─────────┤
+            │ en (source) │      5      │    -    │
+            │ pl          │      6      │    5    │
+            └─────────────┴─────────────┴─────────┘
+
+            Catalog statistics for fixtures/pages/index.page.ts:
+            ┌─────────────┬─────────────┬─────────┐
+            │ Language    │ Total count │ Missing │
+            ├─────────────┼─────────────┼─────────┤
+            │ en (source) │      5      │    -    │
+            │ pl          │      5      │    5    │
+            └─────────────┴─────────────┴─────────┘
+
+            Extraction completed successfully in <T>
+            Compiling message catalogs…
+            Done in <T>
+          `)
+      })
+
+      compareFolders(actualPath, expectedPath)
+    })
+
+    it("should not hang when no entry points match with worker pool", async () => {
+      const { rootDir, actualPath, expectedPath } = await prepare(
+        "extractor-experimental-no-entries",
+      )
+
+      await mockConsole(async (console) => {
+        const config = getConfig({ cwd: rootDir })
+
+        const result = await extractExperimentalCommand(config, {
+          workersOptions: {
+            poolSize: 2,
+          },
         })
 
         expect(getConsoleMockCalls(console.error)).toBeFalsy()
@@ -197,31 +399,17 @@ describe("E2E Extractor Test", () => {
           You have using an experimental feature
           Experimental features are not covered by semver, and may cause unexpected or broken application behavior. Use at your own risk.
 
-          Catalog statistics for fixtures/pages/index.page.ts:
-          ┌─────────────┬─────────────┬─────────┐
-          │ Language    │ Total count │ Missing │
-          ├─────────────┼─────────────┼─────────┤
-          │ en (source) │      2      │    -    │
-          │ pl          │      2      │    2    │
-          └─────────────┴─────────────┴─────────┘
-
-          Catalog statistics for fixtures/pages/about.page.ts:
-          ┌─────────────┬─────────────┬─────────┐
-          │ Language    │ Total count │ Missing │
-          ├─────────────┼─────────────┼─────────┤
-          │ en (source) │      3      │    -    │
-          │ pl          │      4      │    3    │
-          └─────────────┴─────────────┴─────────┘
-
-          Compiling message catalogs…
+          Resolving entry points...
+          No entry points found (0ms)
         `)
       })
 
       compareFolders(actualPath, expectedPath)
     })
+
     it("should extract and clean obsolete", async () => {
       const { rootDir, actualPath, expectedPath } = await prepare(
-        "extractor-experimental-clean"
+        "extractor-experimental-clean",
       )
 
       await mockConsole(async (console) => {
@@ -230,7 +418,7 @@ describe("E2E Extractor Test", () => {
             rootDir: rootDir,
             locales: ["en", "pl"],
             sourceLocale: "en",
-            format: "po",
+
             catalogs: [],
             experimental: {
               extractor: {
@@ -240,33 +428,78 @@ describe("E2E Extractor Test", () => {
             },
           }),
           {
+            workersOptions: {
+              poolSize: 0,
+            },
             clean: true,
-          }
+          },
         )
 
         expect(getConsoleMockCalls(console.error)).toBeFalsy()
         expect(result).toBeTruthy()
-        expect(getConsoleMockCalls(console.log)).toMatchInlineSnapshot(`
-          You have using an experimental feature
-          Experimental features are not covered by semver, and may cause unexpected or broken application behavior. Use at your own risk.
+        expect(replaceDuration(getConsoleMockCalls(console.log)))
+          .toMatchInlineSnapshot(`
+            You have using an experimental feature
+            Experimental features are not covered by semver, and may cause unexpected or broken application behavior. Use at your own risk.
 
-          Catalog statistics for fixtures/pages/index.page.ts:
-          ┌─────────────┬─────────────┬─────────┐
-          │ Language    │ Total count │ Missing │
-          ├─────────────┼─────────────┼─────────┤
-          │ en (source) │      1      │    -    │
-          │ pl          │      1      │    1    │
-          └─────────────┴─────────────┴─────────┘
+            Resolving entry points...
+            Found 2 entry point(s) (<T>): fixtures/pages/about.page.ts, fixtures/pages/index.page.ts
+            Bundling...
+            Bundling done (<T>)
+            Extracting messages...
+            Extracting done (<T>)
+            Writing catalogs...
+            Writing catalogs done (<T>)
+            Catalog statistics for fixtures/pages/about.page.ts:
+            ┌─────────────┬─────────────┬─────────┐
+            │ Language    │ Total count │ Missing │
+            ├─────────────┼─────────────┼─────────┤
+            │ en (source) │      2      │    -    │
+            │ pl          │      3      │    2    │
+            └─────────────┴─────────────┴─────────┘
 
-          Catalog statistics for fixtures/pages/about.page.ts:
-          ┌─────────────┬─────────────┬─────────┐
-          │ Language    │ Total count │ Missing │
-          ├─────────────┼─────────────┼─────────┤
-          │ en (source) │      2      │    -    │
-          │ pl          │      3      │    2    │
-          └─────────────┴─────────────┴─────────┘
+            Catalog statistics for fixtures/pages/index.page.ts:
+            ┌─────────────┬─────────────┬─────────┐
+            │ Language    │ Total count │ Missing │
+            ├─────────────┼─────────────┼─────────┤
+            │ en (source) │      1      │    -    │
+            │ pl          │      1      │    1    │
+            └─────────────┴─────────────┴─────────┘
 
-        `)
+            Extraction completed successfully in <T>
+          `)
+      })
+
+      compareFolders(actualPath, expectedPath)
+    })
+  })
+
+  describe("extractor-experimental (rolldown)", () => {
+    it("should extract to catalogs and merge with existing", async () => {
+      const { rootDir, actualPath } = await prepare("extractor-experimental")
+      const expectedPath = nodepath.join(rootDir, "expected-rolldown")
+
+      await mockConsole(async (console) => {
+        const config = getConfig({
+          cwd: rootDir,
+          configPath: nodepath.join(rootDir, "lingui.config.rolldown.ts"),
+        })
+
+        const result = await extractExperimentalCommand(config, {
+          workersOptions: {
+            poolSize: 0,
+          },
+        })
+
+        await compileCommand(config, {
+          allowEmpty: true,
+          workersOptions: {
+            poolSize: 0,
+          },
+        })
+
+        expect(getConsoleMockCalls(console.error)).toBeFalsy()
+        expect(result).toBeTruthy()
       })
 
       compareFolders(actualPath, expectedPath)
@@ -275,26 +508,29 @@ describe("E2E Extractor Test", () => {
 
   it("should extract consistently with files argument", async () => {
     const { rootDir, actualPath, expectedPath } = await prepare(
-      "extract-partial-consistency"
+      "extract-partial-consistency",
     )
 
-    await extractCommand(
-      makeConfig({
-        rootDir: rootDir,
-        locales: ["en"],
-        sourceLocale: "en",
-        format: "po",
-        catalogs: [
-          {
-            path: "<rootDir>/actual/{locale}",
-            include: ["<rootDir>/fixtures"],
-          },
-        ],
-      }),
-      {
-        files: [nodepath.join(rootDir, "fixtures", "file-b.tsx")],
-      }
-    )
+    await mockConsole(async () => {
+      await extractCommand(
+        makeConfig({
+          rootDir: rootDir,
+          locales: ["en"],
+          sourceLocale: "en",
+
+          catalogs: [
+            {
+              path: "<rootDir>/actual/{locale}",
+              include: ["<rootDir>/fixtures"],
+            },
+          ],
+        }),
+        {
+          ...defaultOptions,
+          files: [nodepath.join(rootDir, "fixtures", "file-b.tsx")],
+        },
+      )
+    })
 
     compareFolders(actualPath, expectedPath)
   })
@@ -309,7 +545,7 @@ describe("E2E Extractor Test", () => {
           locales: ["en", "pl", "pseudo-LOCALE"],
           pseudoLocale: "pseudo-LOCALE",
           sourceLocale: "en",
-          format: "po",
+
           catalogs: [
             {
               path: "<rootDir>/actual/{locale}",
@@ -317,23 +553,25 @@ describe("E2E Extractor Test", () => {
             },
           ],
         }),
-        {}
+        defaultOptions,
       )
 
       expect(result).toBeTruthy()
       expect(getConsoleMockCalls(console.error)).toBeFalsy()
-      expect(getConsoleMockCalls(console.log)).toMatchInlineSnapshot(`
-        Catalog statistics for actual/{locale}: 
-        ┌─────────────┬─────────────┬─────────┐
-        │ Language    │ Total count │ Missing │
-        ├─────────────┼─────────────┼─────────┤
-        │ en (source) │     10      │    -    │
-        │ pl          │     10      │   10    │
-        └─────────────┴─────────────┴─────────┘
+      expect(replaceDuration(getConsoleMockCalls(console.log)))
+        .toMatchInlineSnapshot(`
+          Done in <T>
+          Catalog statistics for actual/{locale}: 
+          ┌─────────────┬─────────────┬─────────┐
+          │ Language    │ Total count │ Missing │
+          ├─────────────┼─────────────┼─────────┤
+          │ en (source) │     10      │    -    │
+          │ pl          │     10      │   10    │
+          └─────────────┴─────────────┴─────────┘
 
-        (Use "yarn extract" to update catalogs with new messages.)
-        (Use "yarn compile" to compile catalogs for production. Alternatively, use bundler plugins: https://lingui.dev/ref/cli#compiling-catalogs-in-ci)
-      `)
+          (Use "yarn extract" to update catalogs with new messages.)
+          (Use "yarn compile" to compile catalogs for production. Alternatively, use bundler plugins: https://lingui.dev/ref/cli#compiling-catalogs-in-ci)
+        `)
     })
   })
 })

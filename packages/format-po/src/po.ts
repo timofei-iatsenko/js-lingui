@@ -1,11 +1,17 @@
-import { format as formatDate } from "date-fns"
-import PO from "pofile"
+import {
+  parsePo,
+  stringifyPo,
+  createPoFile,
+  createItem,
+  type PoFile,
+  type PoItem,
+  type Headers as POHeaders,
+  type SerializeOptions,
+} from "pofile-ts"
 
 import { CatalogFormatter, CatalogType, MessageType } from "@lingui/conf"
 import { generateMessageId } from "@lingui/message-utils/generateMessageId"
-import { normalizePlaceholderValue } from "./utils"
-
-type POItem = InstanceType<typeof PO.Item>
+import { formatPotCreationDate, normalizePlaceholderValue } from "./utils"
 
 const splitOrigin = (origin: string) => {
   const [file, line] = origin.split(":")
@@ -19,7 +25,7 @@ const splitMultiLineComments = (comments: string[]) => {
           .split("\n")
           .map((slice) => slice.trim())
           .filter(Boolean)
-      : comment
+      : comment,
   )
 }
 
@@ -101,18 +107,51 @@ export type PoFormatterOptions = {
    * @default true
    */
   printPlaceholdersInComments?: boolean | { limit?: number }
+
+  /**
+   * Maximum line width before folding long strings.
+   *
+   * When a string exceeds this length, it will be split across multiple lines.
+   * Set to `0` to disable folding (strings will only break on actual newlines).
+   *
+   * @default 0
+   */
+  foldLength?: number
+
+  /**
+   * Use compact format for multiline strings.
+   *
+   * When `true` (default), multiline strings start with content on the first line:
+   * ```po
+   * msgid "First line\n"
+   * "Second line"
+   * ```
+   *
+   * When `false`, uses GNU gettext's traditional format with an empty first line:
+   * ```po
+   * msgid ""
+   * "First line\n"
+   * "Second line"
+   * ```
+   *
+   * The compact format is recommended as it's compatible with translation
+   * platforms that may strip empty first lines, avoiding unnecessary diffs.
+   *
+   * @default true
+   */
+  compactMultiline?: boolean
 }
 
 function isGeneratedId(id: string, message: MessageType): boolean {
-  return id === generateMessageId(message.message, message.context)
+  return id === generateMessageId(message.message!, message.context)
 }
 
 function getCreateHeaders(
-  language: string,
-  customHeaderAttributes: PoFormatterOptions["customHeaderAttributes"]
-): PO["headers"] {
+  language: string | undefined,
+  customHeaderAttributes: PoFormatterOptions["customHeaderAttributes"],
+): Partial<POHeaders> {
   return {
-    "POT-Creation-Date": formatDate(new Date(), "yyyy-MM-dd HH:mmxxxx"),
+    "POT-Creation-Date": formatPotCreationDate(new Date()),
     "MIME-Version": "1.0",
     "Content-Type": "text/plain; charset=utf-8",
     "Content-Transfer-Encoding": "8bit",
@@ -125,11 +164,15 @@ function getCreateHeaders(
 const EXPLICIT_ID_FLAG = "js-lingui-explicit-id"
 const GENERATED_ID_FLAG = "js-lingui-generated-id"
 
-const serialize = (catalog: CatalogType, options: PoFormatterOptions) => {
+const serialize = (
+  catalog: CatalogType,
+  options: PoFormatterOptions,
+  ctx: { locale: string | undefined; sourceLocale: string },
+) => {
   return Object.keys(catalog).map((id) => {
     const message: MessageType<POCatalogExtra> = catalog[id]
 
-    const item = new PO.Item()
+    const item = createItem()
 
     // The extractedComments array may be modified in this method,
     // so create a new array with the message's elements.
@@ -149,7 +192,7 @@ const serialize = (catalog: CatalogType, options: PoFormatterOptions) => {
     const _isGeneratedId = isGeneratedId(id, message)
 
     if (_isGeneratedId) {
-      item.msgid = message.message
+      item.msgid = message.message!
 
       if (options.explicitIdAsDefault) {
         if (!item.extractedComments.includes(GENERATED_ID_FLAG)) {
@@ -172,9 +215,9 @@ const serialize = (catalog: CatalogType, options: PoFormatterOptions) => {
       item.msgid = id
     }
 
-    if (options.printPlaceholdersInComments !== false) {
+    if (options.printPlaceholdersInComments !== false && message.placeholders) {
       item.extractedComments = item.extractedComments.filter(
-        (comment) => !comment.startsWith("placeholder ")
+        (comment) => !comment.startsWith("placeholder "),
       )
 
       const limit =
@@ -188,7 +231,7 @@ const serialize = (catalog: CatalogType, options: PoFormatterOptions) => {
           if (/^\d+$/.test(name)) {
             value.slice(0, limit).forEach((entry) => {
               item.extractedComments.push(
-                `placeholder {${name}}: ${normalizePlaceholderValue(entry)}`
+                `placeholder {${name}}: ${normalizePlaceholderValue(entry)}`,
               )
             })
           }
@@ -200,31 +243,46 @@ const serialize = (catalog: CatalogType, options: PoFormatterOptions) => {
       item.msgctxt = message.context
     }
 
-    item.msgstr = [message.translation]
+    if (!_isGeneratedId && (ctx.locale === ctx.sourceLocale || !ctx.locale)) {
+      // in source lang catalog if message has explicit id, put a source message as translation
+      // Otherwise, source message would be completely lost
+      //   #. js-lingui-explicit-id
+      //   msgid "custom.id"
+      //   msgstr "with explicit id"
+      item.msgstr = [message.translation || message.message!]
+    } else {
+      item.msgstr = [message.translation!]
+    }
+
     item.comments = message.extra?.translatorComments || []
 
     if (options.origins !== false) {
       if (message.origin && options.lineNumbers === false) {
-        item.references = message.origin.map(([path]) => path)
+        item.references = [...new Set(message.origin.map(([path]) => path))]
       } else {
         item.references = message.origin ? message.origin.map(joinOrigin) : []
       }
     }
-    item.obsolete = message.obsolete
+    item.obsolete = message.obsolete || false
 
     return item
   })
 }
 
 function deserialize(
-  items: POItem[],
-  options: PoFormatterOptions
+  items: PoItem[],
+  options: PoFormatterOptions,
 ): CatalogType {
   return items.reduce<CatalogType<POCatalogExtra>>((catalog, item) => {
+    const comments = item.extractedComments
+
     const message: MessageType<POCatalogExtra> = {
       translation: item.msgstr[0],
-      comments: item.extractedComments || [],
-      context: item.msgctxt ?? null,
+      comments: comments.filter(
+        // drop flags from comments
+        (c) => c !== GENERATED_ID_FLAG && c !== EXPLICIT_ID_FLAG,
+      ),
+      context: item.msgctxt ?? undefined,
       obsolete: item.flags.obsolete || item.obsolete,
       origin: (item.references || []).map((ref) => splitOrigin(ref)),
       extra: {
@@ -238,10 +296,10 @@ function deserialize(
     // if generated id, recreate it
     if (
       options.explicitIdAsDefault
-        ? item.extractedComments.includes(GENERATED_ID_FLAG)
-        : !item.extractedComments.includes(EXPLICIT_ID_FLAG)
+        ? comments.includes(GENERATED_ID_FLAG)
+        : !comments.includes(EXPLICIT_ID_FLAG)
     ) {
-      id = generateMessageId(item.msgid, item.msgctxt)
+      id = generateMessageId(item.msgid, item.msgctxt as string)
       message.message = item.msgid
     }
 
@@ -254,6 +312,7 @@ export function formatter(options: PoFormatterOptions = {}): CatalogFormatter {
   options = {
     origins: true,
     lineNumbers: true,
+    foldLength: 0,
     ...options,
   }
 
@@ -262,27 +321,38 @@ export function formatter(options: PoFormatterOptions = {}): CatalogFormatter {
     templateExtension: ".pot",
 
     parse(content): CatalogType {
-      const po = PO.parse(content)
+      const po = parsePo(content)
       return deserialize(po.items, options)
     },
 
     serialize(catalog, ctx): string {
-      let po: PO
+      let po: PoFile
 
       if (ctx.existing) {
-        po = PO.parse(ctx.existing)
+        po = parsePo(ctx.existing)
       } else {
-        po = new PO()
+        po = createPoFile()
         po.headers = getCreateHeaders(
           ctx.locale,
-          options.customHeaderAttributes
+          options.customHeaderAttributes,
         )
-        // accessing private property
-        ;(po as any).headerOrder = Object.keys(po.headers)
+        po.headerOrder = Object.keys(po.headers)
       }
 
-      po.items = serialize(catalog, options)
-      return po.toString()
+      po.items = serialize(catalog, options, {
+        locale: ctx.locale,
+        sourceLocale: ctx.sourceLocale,
+      })
+
+      const serializeOptions: SerializeOptions = {}
+      if (options.foldLength !== undefined) {
+        serializeOptions.foldLength = options.foldLength
+      }
+      if (options.compactMultiline !== undefined) {
+        serializeOptions.compactMultiline = options.compactMultiline
+      }
+
+      return stringifyPo(po, serializeOptions)
     },
   }
 }

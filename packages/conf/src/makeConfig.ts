@@ -3,19 +3,24 @@ import type {
   LinguiConfig,
   LinguiConfigNormalized,
 } from "./types"
-import pico from "picocolors"
+import { styleText } from "node:util"
 import { replaceRootDir } from "./utils/replaceRootDir"
 import { multipleValidOptions, validate } from "jest-validate"
 import { setCldrParentLocales } from "./migrations/setCldrParentLocales"
 import { pathJoinPosix } from "./utils/pathJoinPosix"
 import { normalizeRuntimeConfigModule } from "./migrations/normalizeRuntimeConfigModule"
-import { ExperimentalExtractorOptions } from "./types"
+import {
+  ExperimentalExtractorOptions,
+  PseudoLocaleConfig,
+  PseudoLocaleConfigNormalized,
+} from "./types"
 
 export function makeConfig(
   userConfig: Partial<LinguiConfig>,
   opts: {
     skipValidation?: boolean
-  } = {}
+    resolvedConfigPath?: string
+  } = {},
 ): LinguiConfigNormalized {
   let config: LinguiConfig = {
     ...defaultConfig,
@@ -27,8 +32,10 @@ export function makeConfig(
   }
 
   if (!opts.skipValidation) {
+    validateFormat(config)
     validate(config, configValidation)
     validateLocales(config)
+    deprecateParserOptions(config)
   }
 
   // List config migrations from oldest to newest
@@ -36,13 +43,33 @@ export function makeConfig(
   config = normalizeRuntimeConfigModule(config) as any
 
   // `replaceRootDir` should always be the last
-  return replaceRootDir(
+  const out = replaceRootDir(
     config,
-    config.rootDir
+    config.rootDir,
   ) as unknown as LinguiConfigNormalized
+
+  return {
+    ...out,
+    pseudoLocale: normalizePseudoLocale(config.pseudoLocale),
+    resolvedConfigPath: opts.resolvedConfigPath,
+  }
 }
 
-export const defaultConfig: LinguiConfig = {
+/**
+ * Expands the `pseudoLocale` config (a plain string or a {@link PseudoLocaleConfig}
+ * object) into a normalized shape with the locale and its options separated.
+ */
+function normalizePseudoLocale(
+  pseudoLocale: LinguiConfig["pseudoLocale"],
+): PseudoLocaleConfigNormalized {
+  if (!pseudoLocale || typeof pseudoLocale === "string") {
+    return { locale: pseudoLocale ?? "", options: {} }
+  }
+  const { locale, ...options } = pseudoLocale
+  return { locale, options }
+}
+
+export const defaultConfig = {
   catalogs: [
     {
       path: pathJoinPosix("<rootDir>", "locale", "{locale}", "messages"),
@@ -58,43 +85,58 @@ export const defaultConfig: LinguiConfig = {
       minimal: true,
     },
   },
-  extractorParserOptions: {
-    flow: false,
-    tsExperimentalDecorators: false,
-  },
   fallbackLocales: {} as FallbackLocales,
-  format: "po",
-  formatOptions: { origins: true, lineNumbers: true },
   locales: [],
   orderBy: "message",
-  pseudoLocale: "",
+  pseudoLocale: "" as string | PseudoLocaleConfig,
   rootDir: ".",
   runtimeConfigModule: ["@lingui/core", "i18n"],
   macro: {
-    corePackage: ["@lingui/macro", "@lingui/core/macro"],
-    jsxPackage: ["@lingui/macro", "@lingui/react/macro"],
+    corePackage: ["@lingui/core/macro"],
+    jsxPackage: ["@lingui/react/macro"],
   },
   sourceLocale: "",
-  service: { name: "", apiKey: "" },
-}
+} satisfies LinguiConfig
+
 export const exampleConfig = {
   ...defaultConfig,
-  format: multipleValidOptions({}, "po"),
+  macro: {
+    ...defaultConfig.macro,
+    idPrefixLeader: ".",
+    jsxPlaceholderAttribute: "_t",
+    jsxPlaceholderDefaults: multipleValidOptions(
+      {},
+      { a: "link", em: "em", strong: "b" },
+    ),
+    jsxRuntime: multipleValidOptions("react", "solid"),
+  },
+  format: multipleValidOptions({}, {}),
+  pseudoLocale: multipleValidOptions("", {
+    locale: "",
+    prepend: "",
+    append: "",
+    extend: 0,
+    override: "",
+  }),
   extractors: multipleValidOptions([], ["babel"], [Object]),
   runtimeConfigModule: multipleValidOptions(
     { i18n: ["@lingui/core", "i18n"], Trans: ["@lingui/react", "Trans"] },
-    ["@lingui/core", "i18n"]
+    ["@lingui/core", "i18n"],
   ),
   fallbackLocales: multipleValidOptions(
     {},
     { "en-US": "en" },
     { "en-US": ["en"] },
     { default: "en" },
-    false
+    false,
   ),
   extractorParserOptions: {
     flow: false,
     tsExperimentalDecorators: false,
+  },
+  service: {
+    apiKey: "",
+    name: "",
   },
   experimental: {
     extractor: {
@@ -103,6 +145,7 @@ export const exampleConfig = {
       excludeDeps: [],
       excludeExtensions: [],
       output: "",
+      bundler: multipleValidOptions({}, undefined),
       resolveEsbuildOptions: Function,
     },
   } as { extractor: ExperimentalExtractorOptions },
@@ -113,15 +156,53 @@ const configValidation = {
   comment: "Documentation: https://lingui.dev/ref/conf",
 }
 
+function deprecateParserOptions(config: LinguiConfig) {
+  if (config.extractorParserOptions) {
+    console.error(
+      `\`extractorParserOptions\` config option is deprecated.
+      
+Please pass options directly to the extractor implementation:
+      
+import { createBabelExtractor } from '@lingui/cli/api/extractors/babel'
+
+export default {
+  [...]
+  extractors: [createBabelExtractor({parserOptions: { tsExperimentalDecorators: true }})],
+}
+`.trim(),
+    )
+  }
+}
+
+function validateFormat(config: LinguiConfig) {
+  if (typeof config.format === "string") {
+    throw new Error(
+      `String formats like \`{format: ${config.format}}\` are no longer supported.
+      
+Formatters must now be installed as separate packages and provided via format in lingui config:
+        
+import { formatter } from "@lingui/format-po"
+
+export default {
+  [...]
+  format: formatter({lineNumbers: false}),
+}
+`.trim(),
+    )
+  }
+}
+
 function validateLocales(config: LinguiConfig) {
   if (!Array.isArray(config.locales) || !config.locales.length) {
     console.error("No locales defined!\n")
     console.error(
-      `Add ${pico.yellow(
-        "'locales'"
-      )} to your configuration. See ${pico.underline(
-        "https://lingui.dev/ref/conf#locales"
-      )}`
+      `Add ${styleText(
+        "yellow",
+        "'locales'",
+      )} to your configuration. See ${styleText(
+        "underline",
+        "https://lingui.dev/ref/conf#locales",
+      )}`,
     )
   }
 }

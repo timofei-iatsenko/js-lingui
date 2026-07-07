@@ -3,6 +3,112 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [6.5.0](https://github.com/lingui/js-lingui/compare/v6.4.0...v6.5.0) (2026-07-06)
+
+**Note:** Version bump only for package @lingui/format-po
+
+# [6.4.0](https://github.com/lingui/js-lingui/compare/v6.3.0...v6.4.0) (2026-06-16)
+
+**Note:** Version bump only for package @lingui/format-po
+
+# [6.3.0](https://github.com/lingui/js-lingui/compare/v6.2.0...v6.3.0) (2026-06-10)
+
+### Bug Fixes
+
+* **po-format:** set default `foldLength` to 0 ([#2567](https://github.com/lingui/js-lingui/issues/2567)) ([087ff07](https://github.com/lingui/js-lingui/commit/087ff07f7df61b230303fe303189aebe5712d6d5))
+
+# [6.2.0](https://github.com/lingui/js-lingui/compare/v6.1.0...v6.2.0) (2026-06-01)
+
+### Bug Fixes
+
+* provide peer deps for workspace build tools ([#2557](https://github.com/lingui/js-lingui/issues/2557)) ([dd11c28](https://github.com/lingui/js-lingui/commit/dd11c284501fd1ee2b435945a8d8a9af5eeef7cc))
+
+### Features
+
+* integrate `pofile-ts` ([#2548](https://github.com/lingui/js-lingui/issues/2548)) ([ea5b2d3](https://github.com/lingui/js-lingui/commit/ea5b2d33426560990d3ce49a97a58bdedf775cb9))
+
+# [6.1.0](https://github.com/lingui/js-lingui/compare/v6.0.1...v6.1.0) (2026-05-21)
+
+### Bug Fixes
+
+* disappearing placeholder comments in partial extract ([#2543](https://github.com/lingui/js-lingui/issues/2543)) ([725a2bf](https://github.com/lingui/js-lingui/commit/725a2bf4d0b0cbf5d405d6e9ed79efa391bdd572))
+
+## [6.0.1](https://github.com/lingui/js-lingui/compare/v6.0.0...v6.0.1) (2026-04-30)
+
+**Note:** Version bump only for package @lingui/format-po
+
+# [6.0.0](https://github.com/lingui/js-lingui/compare/v5.9.5...v6.0.0) (2026-04-22)
+
+- [Announcing Lingui 6.0](https://lingui.dev/blog/2026/04/22/announcing-lingui-6.0)
+
+## [5.9.5](https://github.com/lingui/js-lingui/compare/v5.9.4...v5.9.5) (2026-04-06)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.9.4](https://github.com/lingui/js-lingui/compare/v5.9.3...v5.9.4) (2026-03-27)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.9.3](https://github.com/lingui/js-lingui/compare/v5.9.2...v5.9.3) (2026-03-13)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.9.2](https://github.com/lingui/js-lingui/compare/v5.9.1...v5.9.2) (2026-02-23)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.9.1](https://github.com/lingui/js-lingui/compare/v5.9.0...v5.9.1) (2026-02-11)
+
+**Note:** Version bump only for package @lingui/format-po
+
+# [5.9.0](https://github.com/lingui/js-lingui/compare/v5.8.0...v5.9.0) (2026-01-23)
+
+**Note:** Version bump only for package @lingui/format-po
+
+# [5.8.0](https://github.com/lingui/js-lingui/compare/v5.7.0...v5.8.0) (2026-01-16)
+
+### Features
+
+* **po-format:** print source message as translation for explicit id ([#2390](https://github.com/lingui/js-lingui/issues/2390)) ([94efdc0](https://github.com/lingui/js-lingui/commit/94efdc05b62a3e4a296c582e9ee757a80e6aeea7))
+
+# [5.7.0](https://github.com/lingui/js-lingui/compare/v5.6.1...v5.7.0) (2025-12-12)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.6.1](https://github.com/lingui/js-lingui/compare/v5.6.0...v5.6.1) (2025-11-28)
+
+**Note:** Version bump only for package @lingui/format-po
+
+# [5.6.0](https://github.com/lingui/js-lingui/compare/v5.5.2...v5.6.0) (2025-11-12)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.5.2](https://github.com/lingui/js-lingui/compare/v5.5.1...v5.5.2) (2025-10-30)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.5.1](https://github.com/lingui/js-lingui/compare/v5.5.0...v5.5.1) (2025-10-10)
+
+**Note:** Version bump only for package @lingui/format-po
+
+# [5.5.0](https://github.com/lingui/js-lingui/compare/v5.4.1...v5.5.0) (2025-09-12)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.4.1](https://github.com/lingui/js-lingui/compare/v5.4.0...v5.4.1) (2025-08-11)
+
+**Note:** Version bump only for package @lingui/format-po
+
+# [5.4.0](https://github.com/lingui/js-lingui/compare/v5.3.3...v5.4.0) (2025-08-01)
+
+**Note:** Version bump only for package @lingui/format-po
+
+## [5.3.3](https://github.com/lingui/js-lingui/compare/v5.3.2...v5.3.3) (2025-07-11)
+
+### Bug Fixes
+
+* standardize repository field format across all packages ([#2269](https://github.com/lingui/js-lingui/issues/2269)) ([a03a984](https://github.com/lingui/js-lingui/commit/a03a984cdc027ece9902277243f671ca15912adc))
+
 ## [5.3.2](https://github.com/lingui/js-lingui/compare/v5.3.1...v5.3.2) (2025-05-27)
 
 **Note:** Version bump only for package @lingui/format-po

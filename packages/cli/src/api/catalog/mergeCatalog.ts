@@ -1,28 +1,44 @@
-import type { MergeOptions } from "../catalog"
-import { CatalogType, ExtractedCatalogType } from "../types"
+import type { MergeOptions } from "../catalog.js"
+import { CatalogType, ExtractedCatalogType } from "../types.js"
 
 export function mergeCatalog(
-  prevCatalog: CatalogType,
+  prevCatalog: CatalogType | undefined,
   nextCatalog: ExtractedCatalogType,
   forSourceLocale: boolean,
-  options: MergeOptions
+  options: MergeOptions,
 ): CatalogType {
+  prevCatalog = prevCatalog || {}
   const nextKeys = Object.keys(nextCatalog)
-  const prevKeys = Object.keys(prevCatalog || {})
+  const prevKeys = Object.keys(prevCatalog)
 
-  const newKeys = nextKeys.filter((key) => !prevKeys.includes(key))
-  const mergeKeys = nextKeys.filter((key) => prevKeys.includes(key))
-  const obsoleteKeys = prevKeys.filter((key) => !nextKeys.includes(key))
+  // this part is optimized for performance, see https://github.com/lingui/js-lingui/pull/2540
+  const hasKeysInBothCatalogs = prevKeys.length > 0 && nextKeys.length > 0
+  let newKeys: string[]
+  let mergeKeys: string[]
+  let obsoleteKeys: string[]
+
+  if (hasKeysInBothCatalogs) {
+    const prevKeySet = new Set(prevKeys)
+    const nextKeySet = new Set(nextKeys)
+
+    newKeys = nextKeys.filter((key) => !prevKeySet.has(key))
+    mergeKeys = nextKeys.filter((key) => prevKeySet.has(key))
+    obsoleteKeys = prevKeys.filter((key) => !nextKeySet.has(key))
+  } else {
+    newKeys = nextKeys
+    mergeKeys = []
+    obsoleteKeys = prevKeys
+  }
 
   // Initialize new catalog with new keys
   const newMessages: CatalogType = Object.fromEntries(
     newKeys.map((key) => [
       key,
       {
-        translation: forSourceLocale ? nextCatalog[key].message || key : "",
+        translation: forSourceLocale ? nextCatalog[key]!.message || key : "",
         ...nextCatalog[key],
       },
-    ])
+    ]),
   )
 
   // Merge translations from previous catalog
@@ -30,17 +46,17 @@ export function mergeCatalog(
     mergeKeys.map((key) => {
       const updateFromDefaults =
         forSourceLocale &&
-        (prevCatalog[key].translation === prevCatalog[key].message ||
+        (prevCatalog[key]!.translation === prevCatalog[key]!.message ||
           options.overwrite)
 
       const translation = updateFromDefaults
-        ? nextCatalog[key].message || key
-        : prevCatalog[key].translation
+        ? nextCatalog[key]!.message || key
+        : prevCatalog[key]!.translation
 
-      const { obsolete, ...rest } = nextCatalog[key]
+      const { extra } = prevCatalog[key]!
 
-      return [key, { ...rest, translation }]
-    })
+      return [key, { ...nextCatalog[key], extra, translation }]
+    }),
   )
 
   // Mark all remaining translations as obsolete
@@ -49,10 +65,10 @@ export function mergeCatalog(
     obsoleteKeys.map((key) => [
       key,
       {
-        ...prevCatalog[key],
+        ...prevCatalog![key],
         ...(options.files ? {} : { obsolete: true }),
       },
-    ])
+    ]),
   )
 
   return { ...newMessages, ...mergedMessages, ...obsoleteMessages }

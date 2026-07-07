@@ -2,14 +2,13 @@ import React, { ComponentType, ReactNode } from "react"
 import { generateMessageId } from "@lingui/message-utils/generateMessageId"
 
 import { formatElements } from "./format"
-import type { MessageOptions } from "@lingui/core"
-import { I18n } from "@lingui/core"
+import type { I18n, MessageId, MessageOptions } from "@lingui/core"
 import { setLinguiToMessageFn } from "./meta-utils"
 import { nodesToMessage } from "./nodesToMessage"
 import { LinguiContextLike } from "./trans-types"
 
 export type TransRenderProps = {
-  id: string
+  id: MessageId
   translation: React.ReactNode
   children: React.ReactNode
   message?: string | null
@@ -17,25 +16,23 @@ export type TransRenderProps = {
 
 export type TransRenderCallbackOrComponent =
   | {
-      component?: undefined
+      component?: never
       render?:
-        | ((props: TransRenderProps) => React.ReactElement<any, any>)
-        | null
+        ((props: TransRenderProps) => React.ReactElement<any, any>) | null
     }
   | {
       component?: React.ComponentType<TransRenderProps> | null
-      render?: undefined
+      render?: never
     }
 
 type TransWithChildrenProps = {
   id?: string
   context?: string
-  // todo: add support for {{placeholder}}
   children: React.ReactNode
 }
 
 type TransWithMessageProps = {
-  id: string
+  id: MessageId
   message?: string
   values?: Record<string, unknown>
   components?: { [key: string]: React.ElementType | any }
@@ -52,7 +49,6 @@ export function TransNoContext(
     lingui: LinguiContextLike
   }
 ): React.ReactElement<any, any> | null {
-  // TransWithChildren
   const { children, id, context, ...restProps } = props
   const { values, message, components } = nodesToMessage(children)
 
@@ -95,39 +91,7 @@ function TransWithMessageNoContext(
     lingui: { i18n, defaultComponent },
   } = props
 
-  const values = { ...props.values }
-  const components = { ...props.components }
-
-  if (values) {
-    /*
-      Replace values placeholders with <INDEX /> and add values to `components`.
-      This makes them processed as JSX children and follow JSX semantics.
-
-      Related discussion: https://github.com/lingui/js-lingui/issues/1904
-
-      Another use-case is when React components directly passed as values:
-
-      Example:
-      Translation: 'Hello {name}'
-      Values: { name: <strong>Jane</strong> }
-
-      It'll become "Hello <0 />" with components=[<strong>Jane</strong>]
-
-      Related discussion: https://github.com/lingui/js-lingui/issues/183
-    */
-    Object.keys(values).forEach((key) => {
-      const index = Object.keys(components).length
-
-      // simple scalars should be processed as values to be able to apply formatting
-      if (typeof values[key] === "string" || typeof values[key] === "number") {
-        return
-      }
-
-      // react components, arrays, falsy values, all should be processed as JSX children
-      components[index] = <>{values[key] as ReactNode}</>
-      values[key] = `<${index}/>`
-    })
-  }
+  const { values, components } = getInterpolationValuesAndComponents(props)
 
   const _translation: string =
     i18n && typeof i18n._ === "function"
@@ -145,7 +109,7 @@ function TransWithMessageNoContext(
   }
 
   const FallbackComponent: React.ComponentType<TransRenderProps> =
-    defaultComponent || RenderFragment
+    defaultComponent || RenderChildren
 
   const i18nProps: TransRenderProps = {
     id,
@@ -157,19 +121,20 @@ function TransWithMessageNoContext(
   // Validation of `render` and `component` props
   if (render && component) {
     console.error(
-      "You can't use both `component` and `render` prop at the same time. `component` is ignored."
+      "You can't use both `component` and `render` prop at the same time. `component` is ignored.",
     )
   } else if (render && typeof render !== "function") {
     console.error(
-      `Invalid value supplied to prop \`render\`. It must be a function, provided ${render}`
+      `Invalid value supplied to prop \`render\`. It must be a function, provided ${render}`,
     )
   } else if (component && typeof component !== "function") {
     // Apparently, both function components and class components are functions
     // See https://stackoverflow.com/a/41658173/1535540
     console.error(
-      `Invalid value supplied to prop \`component\`. It must be a React component, provided ${component}`
+      `Invalid value supplied to prop \`component\`. It must be a React component, provided ${component}`,
     )
-    return React.createElement(FallbackComponent, i18nProps, translation)
+
+    return <FallbackComponent {...i18nProps}>{translation}</FallbackComponent>
   }
 
   // Rendering using a render prop
@@ -182,12 +147,50 @@ function TransWithMessageNoContext(
   const Component: React.ComponentType<TransRenderProps> =
     component || FallbackComponent
 
-  return React.createElement(Component, i18nProps, translation)
+  return <Component {...i18nProps}>{translation}</Component>
 }
 
-const RenderFragment = ({ children }: TransRenderProps) => {
-  // cannot use React.Fragment directly because we're passing in props that it doesn't support
-  return <React.Fragment>{children}</React.Fragment>
+const RenderChildren = ({ children }: TransRenderProps) => {
+  return children
+}
+
+const getInterpolationValuesAndComponents = (props: TransWithMessageProps) => {
+  if (!props.values) {
+    return {
+      values: undefined,
+      components: props.components,
+    }
+  }
+
+  const values = { ...props.values }
+  const components = { ...props.components }
+  /*
+      Replace values placeholders with <INDEX /> and add values to `components`.
+      This makes them processed as JSX children and follow JSX semantics.
+
+      Related discussion: https://github.com/lingui/js-lingui/issues/1904
+
+      Another use-case is when React components are directly passed as values:
+
+      Example:
+      Translation: 'Hello {name}'
+      Values: { name: <strong>Jane</strong> }
+
+      It'll become "Hello <0 />" with components=[<strong>Jane</strong>]
+
+      Related discussion: https://github.com/lingui/js-lingui/issues/183
+    */
+  Object.entries(props.values).forEach(([key, valueForKey]) => {
+    // simple scalars should be processed as values to be able to apply formatting
+    if (typeof valueForKey === "string" || typeof valueForKey === "number") {
+      return
+    }
+    const index = Object.keys(components).length
+    // react components, arrays, falsy values, all should be processed as JSX children
+    components[index] = <>{valueForKey}</>
+    values[key] = `<${index}/>`
+  })
+  return { values, components }
 }
 
 setLinguiToMessageFn(TransNoContext, (props, nodesToString) => {

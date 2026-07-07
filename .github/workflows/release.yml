@@ -3,9 +3,9 @@ name: release
 on:
   workflow_dispatch:
     inputs:
-      npmTag:
+      versionType:
         type: choice
-        description: 'NPM tag to release'
+        description: 'Version type to publish'
         options:
         - latest
         - next
@@ -13,54 +13,44 @@ on:
         default: "latest"
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          always-auth: true
-          node-version: 20
+          node-version-file: .nvmrc
           cache: 'yarn'
           scope: '@lingui'
 
       - name: Install dependencies if needed
+        env:
+          YARN_ENABLE_HARDENED_MODE: "1"
         run: yarn install
 
       - name: Build packages
         run: yarn release:build
 
-      - name: Unit Testing
-        run: yarn test:ci
-
-      - name: Linting & Types
-        run: yarn lint:all
-
-      - name: Creates local .npmrc
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-
-      - name: Prepare Lingui-Bot git account
-        uses: oleksiyrudenko/gha-git-credentials@v2-latest
-        with:
-          name: 'Lingui Bot'
-          email: 'linguibot@gmail.com'
-          actor: 'lingui-bot'
-          token: '${{ secrets.GH_TOKEN }}'
-
-      - name: Versioning packages
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: yarn version:${{github.event.inputs.npmTag}}
-
-      - name: Packaging packages with newer version
-        run: yarn release:build
+      - name: Install latest npm CLI
+        run: |
+          npm install -g npm@11.10.0
+          npm --version
 
       - name: Publishing packages
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: yarn release:${{github.event.inputs.npmTag}}
+        run: yarn release:${{github.event.inputs.versionType}}
+
+  reindex-docs:
+    needs: publish
+    if: github.event.inputs.versionType == 'latest'
+    uses: ./.github/workflows/reindex-docs.yml
+    secrets: inherit

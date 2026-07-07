@@ -1,4 +1,4 @@
-import { getConfig } from "@lingui/conf"
+import { getConfig, LinguiConfigNormalized } from "@lingui/conf"
 import {
   createCompiledCatalog,
   getCatalogs,
@@ -9,6 +9,7 @@ import {
 } from "@lingui/cli/api"
 import path from "path"
 import type { Plugin } from "vite"
+import { linguiTransformerBabelPreset } from "./linguiTransformerPreset"
 
 const fileRegex = /(\.po|\?lingui)$/
 
@@ -33,50 +34,35 @@ export function lingui({
   failOnCompileError,
   ...linguiConfig
 }: LinguiPluginOpts = {}): Plugin[] {
-  const config = getConfig(linguiConfig)
-
-  const macroIds = new Set([
-    ...config.macro.corePackage,
-    ...config.macro.jsxPackage,
-  ])
+  let config: LinguiConfigNormalized
 
   return [
     {
-      name: "vite-plugin-lingui-report-macro-error",
+      name: "vite-plugin-lingui-get-config",
       enforce: "pre",
-      resolveId(id) {
-        if (macroIds.has(id)) {
-          throw new Error(
-            `The macro you imported from "${id}" is being executed outside the context of compilation. \n` +
-              `This indicates that you don't configured correctly one of the "babel-plugin-macros" / "@lingui/swc-plugin" / "babel-plugin-lingui-macro"` +
-              `Please see the documentation for how to configure Vite with Lingui correctly: ` +
-              "https://lingui.dev/tutorials/setup-vite"
-          )
-        }
+      configResolved: () => {
+        config = getConfig(linguiConfig)
       },
     },
     {
-      name: "vite-plugin-lingui",
-      config: (config) => {
-        // https://github.com/lingui/js-lingui/issues/1464
-        if (!config.optimizeDeps) {
-          config.optimizeDeps = {}
-        }
-        config.optimizeDeps.exclude = config.optimizeDeps.exclude || []
+      name: "vite-plugin-lingui-load-catalog",
+      transform: {
+        filter: {
+          id: fileRegex,
+        },
+        async handler(src, id) {
+          // Additional check for backward compatibility, don't need for Rolldown powered Vite versions (8+)
+          if (!fileRegex.test(id)) {
+            return
+          }
 
-        for (const macroId of macroIds) {
-          config.optimizeDeps.exclude.push(macroId)
-        }
-      },
-      async transform(src, id) {
-        if (fileRegex.test(id)) {
-          id = id.split("?")[0]
+          id = id.split("?")[0]!
 
           const catalogRelativePath = path.relative(config.rootDir, id)
 
           const fileCatalog = getCatalogForFile(
             catalogRelativePath,
-            await getCatalogs(config)
+            await getCatalogs(config),
           )
 
           if (!fileCatalog) {
@@ -87,7 +73,7 @@ Resource: ${id}
 
 Your catalogs:
 ${config.catalogs.map((c) => c.path).join("\n")}
-Please check that catalogs.path is filled properly.\n`
+Please check that catalogs.path is filled properly.\n`,
             )
           }
 
@@ -104,16 +90,16 @@ Please check that catalogs.path is filled properly.\n`
 
           if (
             failOnMissing &&
-            locale !== config.pseudoLocale &&
+            locale !== config.pseudoLocale.locale &&
             missingMessages.length > 0
           ) {
             const message = createMissingErrorMessage(
               locale,
               missingMessages,
-              "loader"
+              "loader",
             )
             throw new Error(
-              `${message}\nYou see this error because \`failOnMissing=true\` in Vite Plugin configuration.`
+              `${message}\nYou see this error because \`failOnMissing=true\` in Vite Plugin configuration.`,
             )
           }
 
@@ -122,8 +108,9 @@ Please check that catalogs.path is filled properly.\n`
             messages,
             {
               namespace: "es",
-              pseudoLocale: config.pseudoLocale,
-            }
+              pseudoLocale: config.pseudoLocale.locale,
+              pseudoLocaleOptions: config.pseudoLocale.options,
+            },
           )
 
           if (errors.length) {
@@ -132,12 +119,12 @@ Please check that catalogs.path is filled properly.\n`
             if (failOnCompileError) {
               throw new Error(
                 message +
-                  `These errors fail build because \`failOnCompileError=true\` in Lingui Vite plugin configuration.`
+                  `These errors fail build because \`failOnCompileError=true\` in Lingui Vite plugin configuration.`,
               )
             } else {
-              console.warn(
+              this.warn(
                 message +
-                  `You can fail the build on these errors by setting \`failOnCompileError=true\` in Lingui Vite Plugin configuration.`
+                  `You can fail the build on these errors by setting \`failOnCompileError=true\` in Lingui Vite Plugin configuration.`,
               )
             }
           }
@@ -145,11 +132,16 @@ Please check that catalogs.path is filled properly.\n`
           return {
             code,
             map: null, // provide source map if available
+            // Vite 8+ (Rolldown) auto-detects module types by file extension.
+            // Since .po files are transformed to JS, we must explicitly declare
+            // the module type to avoid misinterpretation.
+            moduleType: "js",
           }
-        }
+        },
       },
     },
   ]
 }
 
 export default lingui
+export { linguiTransformerBabelPreset }

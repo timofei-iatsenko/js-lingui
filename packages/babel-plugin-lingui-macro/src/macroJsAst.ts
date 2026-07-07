@@ -11,27 +11,32 @@ import {
 } from "@babel/types"
 import { JsMacroName, MsgDescriptorPropKey } from "./constants"
 import { ArgToken, TextToken, Token } from "./icu"
-import { createMessageDescriptorFromTokens } from "./messageDescriptorUtils"
+import {
+  createMessageDescriptorFromTokens,
+  ResolvedDescriptorFields,
+} from "./messageDescriptorUtils"
 import { makeCounter } from "./utils"
+import type { DirectiveValues } from "./linguiDirective"
 
 export type MacroJsContext = {
   // Positional expressions counter (e.g. for placeholders `Hello {0}, today is {1}`)
   getExpressionIndex: () => number
-  stripNonEssentialProps: boolean
-  stripMessageProp: boolean
+  descriptorFields: ResolvedDescriptorFields
   isLinguiIdentifier: (node: Identifier, macro: JsMacroName) => boolean
+  getDirective: (line: number) => DirectiveValues | undefined
+  idPrefixLeader?: string
 }
 
 export function createMacroJsContext(
   isLinguiIdentifier: MacroJsContext["isLinguiIdentifier"],
-  stripNonEssentialProps: boolean,
-  stripMessageProp: boolean
+  descriptorFields: ResolvedDescriptorFields,
+  getDirective: MacroJsContext["getDirective"] = () => undefined,
 ): MacroJsContext {
   return {
-    getExpressionIndex: makeCounter(),
     isLinguiIdentifier,
-    stripNonEssentialProps,
-    stripMessageProp,
+    getExpressionIndex: makeCounter(),
+    descriptorFields,
+    getDirective,
   }
 }
 
@@ -55,20 +60,20 @@ export function createMacroJsContext(
  */
 export function processDescriptor(
   descriptor: ObjectExpression,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ) {
   const messageProperty = getObjectPropertyByKey(
     descriptor,
-    MsgDescriptorPropKey.message
+    MsgDescriptorPropKey.message,
   )
   const idProperty = getObjectPropertyByKey(descriptor, MsgDescriptorPropKey.id)
   const contextProperty = getObjectPropertyByKey(
     descriptor,
-    MsgDescriptorPropKey.context
+    MsgDescriptorPropKey.context,
   )
   const commentProperty = getObjectPropertyByKey(
     descriptor,
-    MsgDescriptorPropKey.comment
+    MsgDescriptorPropKey.comment,
   )
 
   let tokens: Token[] = []
@@ -84,23 +89,26 @@ export function processDescriptor(
       : tokenizeNode(messageValue, true, ctx)
   }
 
+  const directive = ctx.getDirective(descriptor.loc?.start.line) || {}
+
   return createMessageDescriptorFromTokens(
     tokens,
     descriptor.loc,
-    ctx.stripNonEssentialProps,
-    ctx.stripMessageProp,
+    ctx.descriptorFields,
     {
+      ...directive,
       id: idProperty,
-      context: contextProperty,
-      comment: commentProperty,
-    }
+      idPrefixLeader: ctx.idPrefixLeader,
+      context: contextProperty ?? directive?.context,
+      comment: commentProperty ?? directive?.comment,
+    },
   )
 }
 
 export function tokenizeNode(
   node: Node,
   ignoreExpression = false,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ): Token[] {
   if (isI18nMethod(node, ctx)) {
     // t
@@ -141,7 +149,7 @@ export function tokenizeNode(
  */
 export function tokenizeTemplateLiteral(
   node: Expression,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ): Token[] {
   const tpl = t.isTaggedTemplateExpression(node)
     ? node.quasi
@@ -171,7 +179,7 @@ export function tokenizeTemplateLiteral(
 export function tokenizeChoiceComponent(
   node: CallExpression,
   componentName: string,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ): ArgToken {
   const format = componentName.toLowerCase()
 
@@ -226,11 +234,11 @@ export function tokenizeChoiceComponent(
 
 function tokenizeLabeledExpression(
   node: ObjectExpression,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ): ArgToken {
   if (node.properties.length > 1) {
     throw new Error(
-      "Incorrect usage, expected exactly one property as `{variableName: variableValue}`"
+      "Incorrect usage, expected exactly one property as `{variableName: variableValue}`",
     )
   }
 
@@ -245,14 +253,14 @@ function tokenizeLabeledExpression(
     }
   } else {
     throw new Error(
-      "Incorrect usage of a labeled expression. Expected to have one object property with property key as identifier"
+      "Incorrect usage of a labeled expression. Expected to have one object property with property key as identifier",
     )
   }
 }
 
 export function tokenizeExpression(
   node: Node | Expression,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ): ArgToken {
   if (t.isTSAsExpression(node)) {
     return tokenizeExpression(node.expression, ctx)
@@ -266,7 +274,7 @@ export function tokenizeExpression(
   ) {
     if (!t.isObjectExpression(node.arguments[0])) {
       throw new Error(
-        "Incorrect usage of `ph` macro. First argument should be an ObjectExpression"
+        "Incorrect usage of `ph` macro. First argument should be an ObjectExpression",
       )
     }
 
@@ -282,7 +290,7 @@ export function tokenizeExpression(
 
 export function tokenizeArg(
   node: CallExpression,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ): ArgToken {
   const arg = node.arguments[0] as Expression
 
@@ -296,7 +304,7 @@ export function tokenizeArg(
 
 export function expressionToArgument(
   exp: Expression,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ): string {
   if (t.isIdentifier(exp)) {
     return exp.name
@@ -335,7 +343,7 @@ export function isI18nMethod(node: Node, ctx: MacroJsContext) {
 export function isLinguiIdentifier(
   node: Node,
   name: JsMacroName,
-  ctx: MacroJsContext
+  ctx: MacroJsContext,
 ) {
   if (!t.isIdentifier(node)) {
     return false
@@ -362,13 +370,13 @@ export function isChoiceMethod(node: Node, ctx: MacroJsContext) {
 
 function getObjectPropertyByKey(
   objectExp: ObjectExpression,
-  key: string
+  key: string,
 ): ObjectProperty {
   return objectExp.properties.find(
     (property) =>
       t.isObjectProperty(property) &&
       t.isIdentifier(property.key as Expression, {
         name: key,
-      })
+      }),
   ) as ObjectProperty
 }

@@ -1,8 +1,7 @@
 {
+  "extends": "../../../../tsconfig.typetest.json",
   "compilerOptions": {
-    "jsx": "react",
-    "esModuleInterop": true,
-    "skipLibCheck": true
+    "jsx": "react-jsx"
   },
-  "paths": {}
+  "include": ["**/*"]
 }

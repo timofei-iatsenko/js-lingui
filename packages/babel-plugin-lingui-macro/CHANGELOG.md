@@ -3,6 +3,115 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [6.5.0](https://github.com/lingui/js-lingui/compare/v6.4.0...v6.5.0) (2026-07-06)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+# [6.4.0](https://github.com/lingui/js-lingui/compare/v6.3.0...v6.4.0) (2026-06-16)
+
+### Features
+
+* **macro:** set `/** i18n */` extraction mark instead of `/* i18n */` ([#2571](https://github.com/lingui/js-lingui/issues/2571)) ([57e3d4a](https://github.com/lingui/js-lingui/commit/57e3d4aef795bf5ab18eacb40da6eee56032a828))
+* solidjs integration ([#2510](https://github.com/lingui/js-lingui/issues/2510)) ([7aacbeb](https://github.com/lingui/js-lingui/commit/7aacbeba4ac0670dac4c2b90f41bd336e4fc2ac8))
+
+# [6.3.0](https://github.com/lingui/js-lingui/compare/v6.2.0...v6.3.0) (2026-06-10)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+# [6.2.0](https://github.com/lingui/js-lingui/compare/v6.1.0...v6.2.0) (2026-06-01)
+
+### Bug Fixes
+
+* provide peer deps for workspace build tools ([#2557](https://github.com/lingui/js-lingui/issues/2557)) ([dd11c28](https://github.com/lingui/js-lingui/commit/dd11c284501fd1ee2b435945a8d8a9af5eeef7cc))
+
+# [6.1.0](https://github.com/lingui/js-lingui/compare/v6.0.1...v6.1.0) (2026-05-21)
+
+### Features
+
+* add lingui-set/lingui-reset comment directives ([#2514](https://github.com/lingui/js-lingui/issues/2514)) ([96a52e8](https://github.com/lingui/js-lingui/commit/96a52e8323ff7d6de40a0067aa04c1270bc3370f))
+
+## [6.0.1](https://github.com/lingui/js-lingui/compare/v6.0.0...v6.0.1) (2026-04-30)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+# [6.0.0](https://github.com/lingui/js-lingui/compare/v5.9.5...v6.0.0) (2026-04-22)
+
+- [Announcing Lingui 6.0](https://lingui.dev/blog/2026/04/22/announcing-lingui-6.0)
+
+## [5.9.5](https://github.com/lingui/js-lingui/compare/v5.9.4...v5.9.5) (2026-04-06)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+## [5.9.4](https://github.com/lingui/js-lingui/compare/v5.9.3...v5.9.4) (2026-03-27)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+## [5.9.3](https://github.com/lingui/js-lingui/compare/v5.9.2...v5.9.3) (2026-03-13)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+## [5.9.2](https://github.com/lingui/js-lingui/compare/v5.9.1...v5.9.2) (2026-02-23)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+## [5.9.1](https://github.com/lingui/js-lingui/compare/v5.9.0...v5.9.1) (2026-02-11)
+
+### Bug Fixes
+
+* **macro:** Ignore JSX comments when generating message ids ([#2434](https://github.com/lingui/js-lingui/issues/2434)) ([c09deaa](https://github.com/lingui/js-lingui/commit/c09deaac19f2297a8c136cd98f1f3f76178891b0))
+
+# [5.9.0](https://github.com/lingui/js-lingui/compare/v5.8.0...v5.9.0) (2026-01-23)
+
+### Bug Fixes
+
+* **jsx-macro:** skip unsupported attributes on Plural / Select ([#2407](https://github.com/lingui/js-lingui/issues/2407)) ([e63992d](https://github.com/lingui/js-lingui/commit/e63992dee2a0a9bc53e91944e7e5d0e6a7a177fc))
+
+# [5.8.0](https://github.com/lingui/js-lingui/compare/v5.7.0...v5.8.0) (2026-01-16)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+# [5.7.0](https://github.com/lingui/js-lingui/compare/v5.6.1...v5.7.0) (2025-12-12)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+## [5.6.1](https://github.com/lingui/js-lingui/compare/v5.6.0...v5.6.1) (2025-11-28)
+
+### Bug Fixes
+
+* **macro:** recrawl scope only if useLingui was used ([#2370](https://github.com/lingui/js-lingui/issues/2370)) ([9fd8b84](https://github.com/lingui/js-lingui/commit/9fd8b8455d5d5f4fc2b774155e7c8a457dac40d2))
+
+# [5.6.0](https://github.com/lingui/js-lingui/compare/v5.5.2...v5.6.0) (2025-11-12)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+## [5.5.2](https://github.com/lingui/js-lingui/compare/v5.5.1...v5.5.2) (2025-10-30)
+
+### Bug Fixes
+
+* **macro:** correctly update bindings after transformation ([#2356](https://github.com/lingui/js-lingui/issues/2356)) ([a9fdf3f](https://github.com/lingui/js-lingui/commit/a9fdf3f0ce69314ab8eaae6668d8c6daa48b3f2a))
+
+## [5.5.1](https://github.com/lingui/js-lingui/compare/v5.5.0...v5.5.1) (2025-10-10)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+# [5.5.0](https://github.com/lingui/js-lingui/compare/v5.4.1...v5.5.0) (2025-09-12)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+## [5.4.1](https://github.com/lingui/js-lingui/compare/v5.4.0...v5.4.1) (2025-08-11)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+# [5.4.0](https://github.com/lingui/js-lingui/compare/v5.3.3...v5.4.0) (2025-08-01)
+
+**Note:** Version bump only for package @lingui/babel-plugin-lingui-macro
+
+## [5.3.3](https://github.com/lingui/js-lingui/compare/v5.3.2...v5.3.3) (2025-07-11)
+
+### Bug Fixes
+
+* standardize repository field format across all packages ([#2269](https://github.com/lingui/js-lingui/issues/2269)) ([a03a984](https://github.com/lingui/js-lingui/commit/a03a984cdc027ece9902277243f671ca15912adc))
+
 ## [5.3.2](https://github.com/lingui/js-lingui/compare/v5.3.1...v5.3.2) (2025-05-27)
 
 

@@ -1,14 +1,28 @@
 import {
+  CatalogType,
   ExtractedMessage,
   ExtractorCtx,
   FallbackLocales,
   LinguiConfig,
+  ExtractorType,
 } from "@lingui/conf"
 import { expect } from "tstyche"
 
 // only required props
 expect({
   locales: ["en", "pl"],
+}).type.toBeAssignableTo<LinguiConfig>()
+
+// pseudoLocale as a string
+expect({
+  locales: ["en", "pseudo"],
+  pseudoLocale: "pseudo",
+}).type.toBeAssignableTo<LinguiConfig>()
+
+// pseudoLocale as an object with pseudolocale options
+expect({
+  locales: ["en", "pseudo"],
+  pseudoLocale: { locale: "pseudo", prepend: "⟦ ", append: " ⟧", extend: 0.4 },
 }).type.toBeAssignableTo<LinguiConfig>()
 
 // all props
@@ -33,8 +47,6 @@ expect({
     tsExperimentalDecorators: false,
   },
   fallbackLocales: {} as FallbackLocales,
-  format: "po" as const,
-  formatOptions: { origins: true, lineNumbers: true },
   locales: [],
   orderBy: "messageId" as const,
   pseudoLocale: "",
@@ -54,10 +66,25 @@ expect({
         filename: string,
         code: string,
         onMessageExtracted: (msg: ExtractedMessage) => void,
-        ctx?: ExtractorCtx
+        ctx?: ExtractorCtx,
       ) => {},
     },
   ],
+}).type.toBeAssignableTo<LinguiConfig>()
+
+// custom formatter
+expect({
+  locales: ["en", "pl"],
+  format: {
+    catalogExtension: "po",
+    templateExtension: "pot",
+    parse(content: string): Promise<CatalogType> {
+      return Promise.resolve({} as CatalogType)
+    },
+    serialize(catalog: CatalogType): Promise<string> {
+      return Promise.resolve("")
+    },
+  },
 }).type.toBeAssignableTo<LinguiConfig>()
 
 // runtimeConfigModule
@@ -73,3 +100,13 @@ expect({
     Trans: ["./custom-config", "Trans"] as [string, string],
   },
 }).type.toBeAssignableTo<LinguiConfig>()
+
+const extractor: ExtractorType = {
+  match: (fileName: string) => false,
+  extract: (
+    filename: string,
+    code: string,
+    onMessageExtracted: (msg: ExtractedMessage) => void,
+    ctx?: ExtractorCtx,
+  ) => {},
+}

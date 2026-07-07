@@ -1,6 +1,12 @@
 import { interpolate } from "./interpolate"
 import { isString, isFunction } from "./essentials"
-import { date, defaultLocale, number } from "./formats"
+import {
+  date,
+  type DateTimeFormatValue,
+  defaultLocale,
+  number,
+  type NumberFormatValue,
+} from "./formats"
 import { EventEmitter } from "./eventEmitter"
 import { compileMessage } from "@lingui/message-utils/compileMessage"
 import type { CompiledMessage } from "@lingui/message-utils/compileMessage"
@@ -22,28 +28,42 @@ export type Formats = Record<
 
 export type Values = Record<string, unknown>
 
-/**
- * @deprecated Plurals automatically used from Intl.PluralRules you can safely remove this call. Deprecated in v4
- */
-export type LocaleData = {
-  plurals?: (
-    n: number,
-    ordinal?: boolean
-  ) => ReturnType<Intl.PluralRules["select"]>
-}
-
-/**
- * @deprecated Plurals automatically used from Intl.PluralRules you can safely remove this call. Deprecated in v4
- */
-export type AllLocaleData = Record<Locale, LocaleData>
-
 export type UncompiledMessage = string
 export type Messages = Record<string, UncompiledMessage | CompiledMessage>
 
 export type AllMessages = Record<Locale, Messages>
 
+/**
+ * Register interface for module augmentation.
+ * Users can augment this interface to narrow MessageId to a specific union type.
+ *
+ * @example
+ * ```ts
+ * // src/lingui.d.ts
+ * import type enMessages from "./locales/en/messages.json";
+ *
+ * declare module "@lingui/core" {
+ *   interface Register {
+ *     messageIds: keyof typeof enMessages;
+ *   }
+ * }
+ * ```
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intentionally empty; users augment this via module augmentation
+export interface Register {}
+
+/**
+ * Resolves to the registered message ID union, or falls back to `string`
+ * when no augmentation exists.
+ */
+export type MessageId = Register extends {
+  messageIds: infer TIds extends string
+}
+  ? TIds
+  : string
+
 export type MessageDescriptor = {
-  id: string
+  id: MessageId
   comment?: string
   message?: string
   values?: Record<string, unknown>
@@ -51,7 +71,7 @@ export type MessageDescriptor = {
 
 export type MissingMessageEvent = {
   locale: Locale
-  id: string
+  id: MessageId
 }
 
 type MissingHandler = string | ((locale: string, id: string) => string)
@@ -60,10 +80,6 @@ export type I18nProps = {
   locale?: Locale
   locales?: Locales
   messages?: AllMessages
-  /**
-   * @deprecated Plurals automatically used from Intl.PluralRules you can safely remove this call. Deprecated in v4
-   */
-  localeData?: AllLocaleData
   missing?: MissingHandler
 }
 
@@ -86,7 +102,6 @@ export type MessageCompiler = (message: string) => CompiledMessage
 export class I18n extends EventEmitter<Events> {
   private _locale: Locale = ""
   private _locales?: Locales
-  private _localeData: AllLocaleData = {}
   private _messages: AllMessages = {}
   private _missing?: MissingHandler
   private _messageCompiler?: MessageCompiler
@@ -100,7 +115,6 @@ export class I18n extends EventEmitter<Events> {
 
     if (params.missing != null) this._missing = params.missing
     if (params.messages != null) this.load(params.messages)
-    if (params.localeData != null) this.loadLocaleData(params.localeData)
     if (typeof params.locale === "string" || params.locales) {
       this.activate(params.locale ?? defaultLocale, params.locales)
     }
@@ -117,23 +131,6 @@ export class I18n extends EventEmitter<Events> {
   get messages(): Messages {
     return this._messages[this._locale] ?? {}
   }
-
-  /**
-   * @deprecated this has no effect. Please remove this from the code. Deprecated in v4
-   */
-  get localeData(): LocaleData {
-    return this._localeData[this._locale] ?? {}
-  }
-
-  private _loadLocaleData(locale: Locale, localeData: LocaleData) {
-    const maybeLocaleData = this._localeData[locale]
-    if (!maybeLocaleData) {
-      this._localeData[locale] = localeData
-    } else {
-      Object.assign(maybeLocaleData, localeData)
-    }
-  }
-
   /**
    * Registers a `MessageCompiler` to enable the use of uncompiled catalogs at runtime.
    *
@@ -153,37 +150,6 @@ export class I18n extends EventEmitter<Events> {
     this._messageCompiler = compiler
     return this
   }
-
-  /**
-   * @deprecated Plurals automatically used from Intl.PluralRules you can safely remove this call. Deprecated in v4
-   */
-  public loadLocaleData(allLocaleData: AllLocaleData): void
-  /**
-   * @deprecated Plurals automatically used from Intl.PluralRules you can safely remove this call. Deprecated in v4
-   */
-  public loadLocaleData(locale: Locale, localeData: LocaleData): void
-  /**
-   * @deprecated Plurals automatically used from Intl.PluralRules you can safely remove this call. Deprecated in v4
-   */
-  loadLocaleData(
-    localeOrAllData: AllLocaleData | Locale,
-    localeData?: LocaleData
-  ) {
-    if (typeof localeOrAllData === "string") {
-      // loadLocaleData('en', enLocaleData)
-      // Loading locale data for a single locale.
-      this._loadLocaleData(localeOrAllData, localeData!)
-    } else {
-      // loadLocaleData(allLocaleData)
-      // Loading all locale data at once.
-      Object.keys(localeOrAllData).forEach((locale) =>
-        this._loadLocaleData(locale, localeOrAllData[locale]!)
-      )
-    }
-
-    this.emit("change")
-  }
-
   private _load(locale: Locale, messages: Messages) {
     const maybeMessages = this._messages[locale]
     if (!maybeMessages) {
@@ -204,7 +170,7 @@ export class I18n extends EventEmitter<Events> {
       // load(catalogs)
       // Loading several locales at once.
       Object.entries(localeOrMessages).forEach(([locale, messages]) =>
-        this._load(locale, messages)
+        this._load(locale, messages),
       )
     }
 
@@ -237,17 +203,17 @@ export class I18n extends EventEmitter<Events> {
 
   // method for translation and formatting
   _(descriptor: MessageDescriptor): string
-  _(id: string, values?: Values, options?: MessageOptions): string
+  _(id: MessageId, values?: Values, options?: MessageOptions): string
   _(
-    id: MessageDescriptor | string,
+    id: MessageDescriptor | MessageId,
     values?: Values,
-    options?: MessageOptions
+    options?: MessageOptions,
   ): string {
     if (!this.locale) {
       throw new Error(
         "Lingui: Attempted to call a translation function without setting a locale.\n" +
           "Make sure to call `i18n.activate(locale)` before using Lingui functions.\n" +
-          "This issue may also occur due to a race condition in your initialization logic."
+          "This issue may also occur due to a race condition in your initialization logic.",
       )
     }
 
@@ -289,9 +255,9 @@ export class I18n extends EventEmitter<Events> {
 > ${translation}
 
 That means you use raw catalog or your catalog doesn't have a translation for the message and fallback was used.
-ICU features such as interpolation and plurals will not work properly for that message. 
+ICU features such as interpolation and plurals will not work properly for that message.
 
-Please compile your catalog first. 
+Please compile your catalog first.
 `)
       }
     }
@@ -303,7 +269,7 @@ Please compile your catalog first.
     return interpolate(
       translation,
       this._locale,
-      this._locales
+      this._locales,
     )(values, options?.formats)
   }
 
@@ -312,11 +278,20 @@ Please compile your catalog first.
    */
   t: I18n["_"] = this._.bind(this)
 
-  date(value: string | Date, format?: Intl.DateTimeFormatOptions): string {
+  /**
+   * @deprecated Use `Intl.DateTimeFormat` directly. This helper will be removed.
+   */
+  date(
+    value?: string | DateTimeFormatValue,
+    format?: Intl.DateTimeFormatOptions,
+  ): string {
     return date(this._locales || this._locale, value, format)
   }
 
-  number(value: number, format?: Intl.NumberFormatOptions): string {
+  /**
+   * @deprecated Use `Intl.NumberFormat` directly. This helper will be removed.
+   */
+  number(value: NumberFormatValue, format?: Intl.NumberFormatOptions): string {
     return number(this._locales || this._locale, value, format)
   }
 }

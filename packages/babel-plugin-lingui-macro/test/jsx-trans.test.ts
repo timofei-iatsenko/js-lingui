@@ -189,12 +189,12 @@ macroTester({
       `,
     },
     {
-      name: "stripMessageField option - message prop is removed if stripMessageField: true",
+      name: "descriptorFields: id-only - message prop is removed",
       macroOpts: {
-        stripMessageField: true,
+        descriptorFields: "id-only",
       },
       code: `
-      import { Trans } from '@lingui/macro';
+      import { Trans } from '@lingui/react/macro';
       <Trans id="msg.hello">Hello World</Trans>
     `,
     },
@@ -207,21 +207,21 @@ macroTester({
       `,
     },
     {
-      name: "Production - message prop is kept if stripMessageField: false",
+      name: "Production - message and context kept with descriptorFields: message",
       production: true,
       macroOpts: {
-        stripMessageField: false,
+        descriptorFields: "message",
       },
       code: `
-      import { Trans } from '@lingui/macro';
+      import { Trans } from '@lingui/react/macro';
       <Trans id="msg.hello" comment="Hello World">Hello World</Trans>
     `,
     },
     {
-      name: "Production - all props kept if extract: true",
+      name: "Production - all props kept with descriptorFields: all",
       production: true,
       macroOpts: {
-        extract: true,
+        descriptorFields: "all",
       },
       code: `
         import { Trans } from '@lingui/react/macro';
@@ -274,6 +274,14 @@ macroTester({
       `,
     },
     {
+      name: "Produce the same ID regardless of CRLF, LF, and CR line endings",
+      code:
+        'import { Trans } from "@lingui/react/macro";\n' +
+        "<Trans>\nhello\n</Trans>;\n" +
+        "<Trans>\r\nhello\r\n</Trans>;\n" +
+        "<Trans>\rhello\r</Trans>;\n",
+    },
+    {
       name: "Keep forced newlines",
       filename: "./jsx-keep-forced-newlines.js",
     },
@@ -303,6 +311,27 @@ macroTester({
       `,
     },
     {
+      name: "JSX comment should not affect expression index",
+      code: `
+        import { Trans } from '@lingui/react/macro';
+        // Without comment - expression gets index 0
+        <Trans>
+          Click here
+          <Link>
+            {getText()}
+          </Link>
+        </Trans>;
+        // With comment before expression - expression should STILL get index 0
+        <Trans>
+          Click here
+          <Link>
+            {/* @ts-expect-error */}
+            {getText()}
+          </Link>
+        </Trans>;
+      `,
+    },
+    {
       name: "Use decoded html entities",
       code: `
         import { Trans } from "@lingui/react/macro";
@@ -327,12 +356,33 @@ macroTester({
               Trans: ["@my/lingui", "myTrans"],
             },
           },
-          { skipValidation: true }
+          { skipValidation: true },
         ),
       },
       code: `
         import { Trans } from '@lingui/react/macro';
         <Trans>Hello World</Trans>;
+      `,
+    },
+    {
+      name: "should generate Solid components",
+      macroOpts: {
+        linguiConfig: makeConfig(
+          {
+            macro: {
+              jsxPackage: ["@lingui/solid/macro"],
+              jsxRuntime: "solid",
+            },
+            runtimeConfigModule: {
+              Trans: ["@lingui/solid", "Trans"],
+            },
+          },
+          { skipValidation: true },
+        ),
+      },
+      code: `
+        import { Trans } from '@lingui/solid/macro';
+        <Trans>Hello <a href="/docs">docs</a>.</Trans>;
       `,
     },
     {
@@ -344,7 +394,7 @@ macroTester({
               jsxPackage: ["@my-lingui/macro"],
             },
           },
-          { skipValidation: true }
+          { skipValidation: true },
         ),
       },
       skipBabelMacroTest: true,

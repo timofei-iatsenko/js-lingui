@@ -1,5 +1,5 @@
 import { i18n } from "@lingui/core"
-import { defineMessage, t } from "@lingui/macro"
+import { defineMessage, t } from "@lingui/core/macro"
 
 const msg = t`Hello world`
 
@@ -16,6 +16,8 @@ const msg3 = null /* original translation commented to mark message obsolete *//
 const msgDescriptor = defineMessage({
   message: "Message in descriptor",
 })
+
+t`Message with unlabeled placeholder ${Date.now()}`
 
 i18n._(msgDescriptor)
 

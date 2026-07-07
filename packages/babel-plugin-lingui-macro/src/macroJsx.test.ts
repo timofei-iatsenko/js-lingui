@@ -34,15 +34,15 @@ const parseExpression = (expression: string) => {
   return path
 }
 
-function createMacro() {
+function createMacro(getDirective?: (line: number) => any) {
   return new MacroJSX(
     { types },
     {
-      stripNonEssentialProps: false,
-      stripMessageProp: false,
+      descriptorFields: "all",
       transImportName: "Trans",
       isLinguiIdentifier: () => true,
-    }
+      getDirective,
+    },
   )
 }
 
@@ -102,7 +102,7 @@ describe("jsx macro", () => {
     it("message with plural", () => {
       const macro = createMacro()
       const exp = parseExpression(
-        "<Trans>Message <Plural value={count} /></Trans>"
+        "<Trans>Message <Plural value={count} /></Trans>",
       )
       const tokens = macro.tokenizeTrans(exp)
       expect(tokens).toEqual([
@@ -127,7 +127,7 @@ describe("jsx macro", () => {
     it("plural", () => {
       const macro = createMacro()
       const exp = parseExpression(
-        "<Plural value={count} one='# book' other='# books' />"
+        "<Plural value={count} one='# book' other='# books' />",
       )
       const tokens = macro.tokenizeChoiceComponent(exp, JsxMacroName.Plural)
       expect(tokens).toEqual({
@@ -154,7 +154,7 @@ describe("jsx macro", () => {
           _0='No books'
           one='# book'
           other='# books'
-         />`
+         />`,
       )
       const tokens = macro.tokenizeChoiceComponent(exp, JsxMacroName.Plural)
       expect(tokens).toEqual({
@@ -183,7 +183,7 @@ describe("jsx macro", () => {
           _0='No books'
           one='# book'
           other='# books'
-         />`
+         />`,
       )
       const tokens = macro.tokenizeChoiceComponent(exp, JsxMacroName.Plural)
       expect(tokens).toEqual({
@@ -205,7 +205,7 @@ describe("jsx macro", () => {
     it("plural with template literal", () => {
       const macro = createMacro()
       const exp = parseExpression(
-        "<Plural value={count} one={`# glass of ${drink}`} other={`# glasses of ${drink}`} />"
+        "<Plural value={count} one={`# glass of ${drink}`} other={`# glasses of ${drink}`} />",
       )
       const tokens = macro.tokenizeChoiceComponent(exp, JsxMacroName.Plural)
       expect(tokens).toEqual({
@@ -262,7 +262,7 @@ describe("jsx macro", () => {
               other="they"
             />
           }
-        />`
+        />`,
       )
       const tokens = macro.tokenizeChoiceComponent(exp, JsxMacroName.Plural)
       expect(tokens).toEqual({
@@ -299,11 +299,11 @@ describe("jsx macro", () => {
       const exp = parseExpression(
         `<Select
           value={gender}
-          male="he"
+          _male="he"
           one="heone"
-          female="she"
+          _female="she"
           other="they"
-        />`
+        />`,
       )
       const tokens = macro.tokenizeNode(exp)
       expect(tokens[0]).toMatchObject({
@@ -321,6 +321,20 @@ describe("jsx macro", () => {
           type: "Identifier",
         },
       })
+    })
+  })
+
+  describe("replacePath", () => {
+    it("prefixes explicit static ids when idPrefixLeader is unset", () => {
+      const macro = createMacro(() => ({ idPrefix: "module." }))
+      const exp = parseExpression('<Trans id="greeting">Hello</Trans>')
+      const node = macro.replacePath(exp) as JSXElement
+      const spread = node.openingElement
+        .attributes[0] as types.JSXSpreadAttribute
+      const descriptor = spread.argument as types.ObjectExpression
+      const idProp = descriptor.properties[0] as types.ObjectProperty
+
+      expect(idProp.value).toEqual(types.stringLiteral("module.greeting"))
     })
   })
 })

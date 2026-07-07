@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`correctly process indexed placeholders in few t calls 1`] = `
 import { useLingui } from "@lingui/react/macro";
@@ -28,15 +28,15 @@ function Home() {
         onClick={() =>
           console.log(
             _t(
-              /*i18n*/
+              /** i18n */
               {
                 id: "Y7riaK",
                 message: "Hello {0}",
                 values: {
                   0: user.name,
                 },
-              }
-            )
+              },
+            ),
           )
         }
       >
@@ -47,15 +47,15 @@ function Home() {
         onClick={() =>
           console.log(
             _t(
-              /*i18n*/
+              /** i18n */
               {
                 id: "vqOLZ6",
                 message: "Bye {0}",
                 values: {
                   0: user.name,
                 },
-              }
-            )
+              },
+            ),
           )
         }
       >
@@ -99,11 +99,11 @@ function MyComponent() {
   const _t = "i'm here";
   const { _: _t2 } = _useLingui();
   const a = _t2(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
 }
 
@@ -144,11 +144,11 @@ import { useLingui as _useLingui } from "@lingui/react";
 function MyComponent() {
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
   {
     // here is child scope with own "t" binding, shouldn't be processed
@@ -158,11 +158,11 @@ function MyComponent() {
   {
     // here is child scope which should be processed, since 't' relates to outer scope
     _t(
-      /*i18n*/
+      /** i18n */
       {
         id: "xeiujy",
         message: "Text",
-      }
+      },
     );
   }
 }
@@ -199,11 +199,11 @@ import { myUselingui as _useLingui } from "@my/lingui-react";
 function MyComponent() {
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
 }
 
@@ -240,12 +240,12 @@ import { useLingui as _useLingui } from "@lingui/react";
 function MyComponent() {
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "BYqAaU",
       message: "Hello",
       context: "my custom",
-    }
+    },
   );
 }
 
@@ -271,7 +271,7 @@ import { useLingui as _useLingui } from "@lingui/react";
 function MyComponent() {
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "hJRCh6",
       message:
@@ -279,7 +279,7 @@ function MyComponent() {
       values: {
         0: users.length,
       },
-    }
+    },
   );
 }
 
@@ -300,13 +300,13 @@ function MyComponent() {
   const a = useMemo(
     () =>
       _t(
-        /*i18n*/
+        /** i18n */
         {
           id: "xeiujy",
           message: "Text",
-        }
+        },
       ),
-    [_t]
+    [_t],
   );
 }
 
@@ -325,11 +325,11 @@ import { useLingui as _useLingui } from "@lingui/react";
 function MyComponent() {
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
 }
 
@@ -348,11 +348,11 @@ import { useLingui as _useLingui } from "@lingui/react";
 function MyComponent() {
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
 }
 
@@ -374,11 +374,11 @@ function MyComponent() {
   const { i18n, _: _t } = _useLingui();
   console.log(i18n);
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
 }
 
@@ -405,11 +405,11 @@ function MyComponent() {
   console.log(_);
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
 }
 
@@ -433,21 +433,21 @@ import { useLingui as _useLingui } from "@lingui/react";
 function MyComponent() {
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
 }
 function MyComponent2() {
   const { _: _t2 } = _useLingui();
   const b = _t2(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
 }
 
@@ -474,12 +474,51 @@ function MyComponent() {
   console.log(_);
   const { _: _t } = _useLingui();
   const a = _t(
-    /*i18n*/
+    /** i18n */
     {
       id: "xeiujy",
       message: "Text",
-    }
+    },
   );
+}
+
+`;
+
+exports[`works with react compiler 1`] = `
+import { useLingui } from "@lingui/react/macro";
+function MyComponent() {
+  const { t } = useLingui();
+
+  return <p>{t\`hello\`}</p>;
+}
+
+↓ ↓ ↓ ↓ ↓ ↓
+
+import { c as _c } from "react/compiler-runtime";
+import { useLingui as _useLingui } from "@lingui/react";
+function MyComponent() {
+  const $ = _c(4);
+  const { _: _t } = _useLingui();
+  let t0;
+  if ($[0] !== _t) {
+    t0 = _t({
+      id: "WfCysZ",
+      message: "hello",
+    });
+    $[0] = _t;
+    $[1] = t0;
+  } else {
+    t0 = $[1];
+  }
+  let t1;
+  if ($[2] !== t0) {
+    t1 = <p>{t0}</p>;
+    $[2] = t0;
+    $[3] = t1;
+  } else {
+    t1 = $[3];
+  }
+  return t1;
 }
 
 `;

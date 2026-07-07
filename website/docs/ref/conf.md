@@ -10,8 +10,6 @@ The following reference covers all supported configuration options in Lingui. To
 By default, Lingui looks for the configuration in the following locations:
 
 - `lingui.config.js` or `lingui.config.ts` file exporting a configuration object (recommended).
-- `.linguirc` file in JSON format.
-- `lingui` section in `package.json`.
 
 You can also define the environment variable `LINGUI_CONFIG` with the path to your config file.
 
@@ -217,6 +215,40 @@ Default value: `""`
 
 Locale used for pseudolocalization. For example, when you set `pseudoLocale: "en"`, all messages in the `en` catalog will be pseudo-localized. The locale must be included in the `locales` config.
 
+It can be provided either as a string, or as an object to additionally configure the underlying [`pseudolocale`](https://github.com/MartinCerny-awin/pseudolocale) library. The token delimiter is managed internally by Lingui (to keep HTML tags, ICU macros and variables intact) and therefore cannot be configured.
+
+:::caution
+The string form (`pseudoLocale: "pseudo"`) is deprecated and will be removed in a future major release. Use the object form (`pseudoLocale: { locale: "pseudo" }`) instead.
+:::
+
+| Option     | Type     | Default     | Description                                                                                         |
+| ---------- | -------- | ----------- | --------------------------------------------------------------------------------------------------- |
+| `locale`   | `string` | —           | Locale used for pseudolocalization (required in the object form)                                    |
+| `prepend`  | `string` | `""`        | String prepended to the beginning of every pseudo-localized message                                 |
+| `append`   | `string` | `""`        | String appended to the end of every pseudo-localized message                                        |
+| `extend`   | `number` | `0`         | Extends the width of the string by the given percentage (e.g. `0.3` adds 30%)                       |
+| `override` | `string` | `undefined` | Replaces every (non-token) character with the given one. Handy to quickly spot untranslated strings |
+
+```ts title="lingui.config.{js,ts}"
+import { defineConfig } from "@lingui/cli";
+
+// Simple form
+export default defineConfig({
+  locales: ["en", "pseudo"],
+  sourceLocale: "en",
+  pseudoLocale: "pseudo",
+  catalogs: [],
+});
+
+// Extended form
+export default defineConfig({
+  locales: ["en", "pseudo"],
+  sourceLocale: "en",
+  pseudoLocale: { locale: "pseudo", prepend: "⟦ ", append: " ⟧", extend: 0.4 },
+  catalogs: [],
+});
+```
+
 Read more about [Pseudolocalization](/guides/pseudolocalization).
 
 ## catalogsMergePath
@@ -298,8 +330,8 @@ Use ES6 named export + `.ts` file with an additional `{compiledFile}.d.ts` file:
 /* eslint-disable */export const messages = {"..."}
 ```
 
-```js
-import { Messages } from '@lingui/core';
+```ts
+import { Messages } from "@lingui/core";
 declare const messages: Messages;
 export { messages };
 ```
@@ -322,7 +354,19 @@ For example, setting [`compileNamespace`](#compilenamespace) to `window.i18n` cr
 
 ## extractorParserOptions
 
-Default value: `{}`
+:::note
+This option is deprecated. If you want to change parser options, pass it directly to extractor implementation
+
+```ts
+import { createBabelExtractor } from "@lingui/cli/api/extractors/babel";
+
+export default {
+  // [...]
+  extractors: [createBabelExtractor({ parserOptions: { tsExperimentalDecorators: true } })],
+};
+```
+
+:::
 
 Specify additional options used to parse source files when extracting messages.
 
@@ -410,6 +454,33 @@ Sort by the message ID, `js-lingui-id` will be used if no custom id provided.
 
 Sort by message origin (e.g. `App.js:3`)
 
+#### Custom Function
+
+You can provide custom sort function:
+
+```ts
+export default defineConfig({
+  // [...]
+  orderBy: (a, b) => {
+    /* `a` and `b` has a shape
+     * {
+     *   messageId: string
+     *   entry: ExtractedMessageType
+     * }
+     */
+    const aIsGlobal = a.messageId.startsWith("global.");
+    const bIsGlobal = b.messageId.startsWith("global.");
+
+    // Put `global.*` entries first
+    if (aIsGlobal && !bIsGlobal) return -1;
+    if (!aIsGlobal && bIsGlobal) return 1;
+
+    // Otherwise, sort alphabetically
+    return a.messageId.localeCompare(b.messageId);
+  },
+});
+```
+
 ## rootDir
 
 Default: The root of the directory containing your Lingui configuration file or the `package.json`.
@@ -491,7 +562,7 @@ Allows customizing the Core Macro package name that the Lingui macro detects.
 // lingui.config
 {
   macro: {
-    corePackage: ["@lingui/myMacro"];
+    corePackage: ["@lingui/myMacro"],
   }
 }
 
@@ -513,7 +584,7 @@ Allows customizing the JSX Macro package name that the Lingui macro detects.
 // lingui.config
 {
   macro: {
-    jsxPackage: ["@lingui/myMacro"];
+    jsxPackage: ["@lingui/myMacro"],
   }
 }
 
@@ -524,3 +595,110 @@ import { Trans } from "@lingui/myMacro";
 ```
 
 This setting mostly useful for external framework integrations.
+
+## macro.jsxPlaceholderAttribute
+
+Default value: `undefined`
+
+The JSX attribute name used to assign explicit placeholder names to JSX elements inside `<Trans>`. When set, the macro reads this attribute from JSX elements to use as the placeholder name in the message string, and strips the attribute from the output.
+
+```jsx
+// lingui.config
+{
+  macro: {
+    jsxPlaceholderAttribute: "_t",
+  }
+}
+
+// source
+<Trans>
+  Click <a _t="link" href="/">here</a>
+</Trans>;
+
+// extracted message: "Click <link>here</link>"
+```
+
+Without this option, JSX elements are assigned auto-generated numeric placeholders (e.g. `<0>here</0>`), which are less readable for translators and may cause issues if the element order changes.
+
+:::note TypeScript Usage
+In React/TypeScript projects, you need to declare the custom attribute so that TypeScript doesn't report an error. Add the following to a `.d.ts` file included in your project:
+
+```ts
+import "react";
+
+declare module "react" {
+  interface Attributes {
+    _t?: string; // replace with your `jsxPlaceholderAttribute` value
+  }
+}
+```
+
+:::
+
+## macro.jsxPlaceholderDefaults
+
+Default value: `undefined`
+
+A mapping of JSX element tag names to default placeholder names. When a JSX element inside `<Trans>` matches a key in this map and does not have an explicit placeholder attribute (see [`macro.jsxPlaceholderAttribute`](#macrojsxplaceholderattribute)), the corresponding value is used as the placeholder name.
+
+```jsx
+// lingui.config
+{
+  macro: {
+    jsxPlaceholderAttribute: "_t",
+    jsxPlaceholderDefaults: {
+      a: "link",
+      em: "emphasis",
+      strong: "bold",
+    },
+  }
+}
+
+// source
+<Trans>
+  Click <a href="/">here</a> and <em>this</em>
+</Trans>;
+
+// extracted message: "Click <link>here</link> and <emphasis>this</emphasis>"
+```
+
+Explicit attributes (via `jsxPlaceholderAttribute`) take priority over defaults.
+
+## macro.idPrefixLeader
+
+Default value: `undefined`
+
+If defined, the `/* lingui-set idPrefix="..." */`) directive will only prepend `idPrefix` to explicit IDs that start with this leader string. This allows you to selectively apply prefixes to specific IDs while leaving others untouched. The leader string is **kept** in the final ID.
+
+```js
+// lingui.config
+export default {
+  macro: {
+    idPrefixLeader: ".",
+  },
+};
+```
+
+```jsx
+// source
+import { Trans } from "@lingui/react/macro"
+
+// lingui-set idPrefix="myPrefix"
+<Trans id=".withPrefix">With prefix</Trans> // id="myPrefix.withPrefix"
+<Trans id="unprefixed">Unprefixed</Trans> // id="unprefixed"
+```
+
+## macro.jsxRuntime
+
+Default value: `undefined`
+
+Controls which JSX runtime semantics the Lingui JSX macro emit.
+
+```ts
+// lingui.config
+{
+  macro: {
+    jsxRuntime: "solid";
+  }
+}
+```

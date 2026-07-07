@@ -1,24 +1,48 @@
 import fs from "fs/promises"
-import babel from "./babel"
+import { createBabelExtractor } from "./babel.js"
 import {
+  Experimental__BatchExtractorType,
   ExtractedMessage,
   ExtractorType,
   LinguiConfigNormalized,
+  PerFileExtractorType,
 } from "@lingui/conf"
 
-const DEFAULT_EXTRACTORS: ExtractorType[] = [babel]
+let defaultExtractor: ExtractorType
+function createDefaultExtractor(linguiConfig: LinguiConfigNormalized) {
+  if (!defaultExtractor) {
+    defaultExtractor = createBabelExtractor({
+      parserOptions: linguiConfig.extractorParserOptions,
+    })
+  }
+  return defaultExtractor
+}
 
-type ExtractOptions = {
-  extractors?: ExtractorType[]
+export function isBatchExtractor(
+  ext: ExtractorType,
+): ext is Experimental__BatchExtractorType {
+  return "extractFromFiles" in ext && typeof ext.extractFromFiles === "function"
+}
+
+export function isPerFileExtractor(
+  ext: ExtractorType,
+): ext is PerFileExtractorType {
+  return "extract" in ext && typeof ext.extract === "function"
+}
+
+export const getConfiguredExtractors = (
+  linguiConfig: LinguiConfigNormalized,
+) => {
+  return linguiConfig.extractors ?? [createDefaultExtractor(linguiConfig)]
 }
 
 export default async function extract(
   filename: string,
   onMessageExtracted: (msg: ExtractedMessage) => void,
   linguiConfig: LinguiConfigNormalized,
-  options: ExtractOptions
 ): Promise<boolean> {
-  const extractorsToExtract = options.extractors ?? DEFAULT_EXTRACTORS
+  const extractorsToExtract =
+    getConfiguredExtractors(linguiConfig).filter(isPerFileExtractor)
 
   for (const ext of extractorsToExtract) {
     if (!ext.match(filename)) continue

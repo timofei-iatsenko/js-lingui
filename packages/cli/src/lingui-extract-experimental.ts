@@ -1,56 +1,92 @@
 import { program } from "commander"
 
-import { getConfig, LinguiConfigNormalized } from "@lingui/conf"
+import {
+  getConfig,
+  LinguiConfigNormalized,
+  ExtractedCatalogType,
+  ExperimentalExtractorBundler,
+} from "@lingui/conf"
 import nodepath from "path"
-import { getFormat } from "./api/formats"
+import { getFormat } from "./api/formats/index.js"
 import fs from "fs/promises"
-import { extractFromFiles } from "./api/catalog/extractFromFiles"
 import normalizePath from "normalize-path"
 
-import { bundleSource } from "./extract-experimental/bundleSource"
+import { createEsbuildBundler } from "./extract-experimental/bundlers/esbuild.js"
+import { globSync } from "node:fs"
+import { styleText } from "node:util"
+import {
+  resolveWorkersOptions,
+  WorkersOptions,
+} from "./api/resolveWorkersOptions.js"
+import { extractFromChunk } from "./extract-experimental/extractFromChunk.js"
 import {
   writeCatalogs,
   writeTemplate,
-} from "./extract-experimental/writeCatalogs"
-import { getEntryPoints } from "./extract-experimental/getEntryPoints"
-import pico from "picocolors"
-import {
-  extractFromFileWithBabel,
-  getBabelParserOptions,
-} from "./api/extractors/babel"
+} from "./extract-experimental/writeCatalogs.js"
+import { createExtractExperimentalWorkerPool } from "./api/workerPools.js"
+import { buildChunkGraph } from "./extract-experimental/buildChunkGraph.js"
+import { mergeExtractedMessage } from "./api/catalog/extractFromFiles.js"
+import ora from "ora"
+import ms from "ms"
 
-export type CliExtractTemplateOptions = {
-  verbose: boolean
+type CliExtractTemplateOptions = {
+  verbose?: boolean
   files?: string[]
   template?: boolean
   locales?: string[]
   overwrite?: boolean
   clean?: boolean
+  workersOptions: WorkersOptions
 }
 
 export default async function command(
   linguiConfig: LinguiConfigNormalized,
-  options: Partial<CliExtractTemplateOptions>
+  options: CliExtractTemplateOptions,
 ): Promise<boolean> {
-  options.verbose && console.log("Extracting messages from source files…")
+  const startTime = Date.now()
 
-  const config = linguiConfig.experimental?.extractor
+  const extractorConfig = linguiConfig.experimental?.extractor
 
-  if (!config) {
+  if (!extractorConfig) {
     throw new Error(
-      "The configuration for experimental extractor is empty. Please read the docs."
+      "The configuration for experimental extractor is empty. Please read the docs.",
     )
   }
 
   console.log(
-    pico.yellow(
+    styleText(
+      "yellow",
       [
         "You have using an experimental feature",
         "Experimental features are not covered by semver, and may cause unexpected or broken application behavior." +
           " Use at your own risk.",
         "",
-      ].join("\n")
-    )
+      ].join("\n"),
+    ),
+  )
+
+  // important to initialize ora before worker pool, otherwise it causes
+  // MaxListenersExceededWarning when workers >= 10
+  const spinner = ora()
+
+  // Phase: Resolve entry points
+  spinner.start("Resolving entry points...")
+  let phaseStart = Date.now()
+  const entryPoints = globSync(extractorConfig.entries)
+
+  if (entryPoints.length === 0) {
+    spinner.warn(`No entry points found (${ms(Date.now() - phaseStart)})`)
+    return true
+  }
+
+  const displayEntries = entryPoints
+    .map((e) => normalizePath(nodepath.relative(linguiConfig.rootDir, e)))
+    .slice(0, 10)
+  const moreCount = entryPoints.length - displayEntries.length
+  const entrySummary =
+    displayEntries.join(", ") + (moreCount > 0 ? ` and ${moreCount} more` : "")
+  spinner.succeed(
+    `Found ${entryPoints.length} entry point(s) (${ms(Date.now() - phaseStart)}): ${entrySummary}`,
   )
 
   // unfortunately we can't use os.tmpdir() in this case
@@ -64,109 +100,188 @@ export default async function command(
   const tempDir = await fs.mkdtemp(tmpPrefix)
   await fs.rm(tempDir, { recursive: true, force: true })
 
-  const bundleResult = await bundleSource(
-    linguiConfig,
-    getEntryPoints(config.entries),
-    tempDir,
-    linguiConfig.rootDir
-  )
+  let bundler: ExperimentalExtractorBundler
+  if (extractorConfig.bundler) {
+    bundler = extractorConfig.bundler
+  } else {
+    bundler = createEsbuildBundler({
+      includeDeps: extractorConfig.includeDeps,
+      excludeExtensions: extractorConfig.excludeExtensions,
+      resolveEsbuildOptions: extractorConfig.resolveEsbuildOptions,
+    })
+  }
+
+  // Phase: Bundling
+  spinner.start("Bundling...")
+  phaseStart = Date.now()
+  const bundleResult = await bundler.bundle(entryPoints, tempDir, linguiConfig)
+  spinner.succeed(`Bundling done (${ms(Date.now() - phaseStart)})`)
+
+  const resolvedChunks = buildChunkGraph(bundleResult.chunks)
+
   const stats: { entry: string; content: string }[] = []
 
   let commandSuccess = true
 
-  const format = await getFormat(
-    linguiConfig.format,
-    linguiConfig.formatOptions,
-    linguiConfig.sourceLocale
-  )
+  // Phase: Extract messages from each chunk
+  spinner.start("Extracting messages...")
+  phaseStart = Date.now()
+  const messagesByEntry = new Map<string, ExtractedCatalogType>()
 
-  linguiConfig.extractors = [
-    {
-      match(_filename: string) {
-        return true
-      },
-
-      async extract(filename, code, onMessageExtracted, ctx) {
-        const parserOptions = ctx.linguiConfig.extractorParserOptions
-
-        return extractFromFileWithBabel(
-          filename,
-          code,
-          onMessageExtracted,
-          ctx,
-          {
-            plugins: getBabelParserOptions(filename, parserOptions),
-          },
-          true
-        )
-      },
-    },
-  ]
-
-  for (const outFile of Object.keys(bundleResult.metafile.outputs)) {
-    const messages = await extractFromFiles([outFile], linguiConfig)
-
-    const { entryPoint } = bundleResult.metafile.outputs[outFile]
-
-    let output: string
-
-    if (!messages) {
-      commandSuccess = false
-      continue
+  if (options.workersOptions.poolSize) {
+    const resolvedConfigPath = linguiConfig.resolvedConfigPath
+    if (!resolvedConfigPath) {
+      throw new Error(
+        "Multithreading is only supported when lingui config loaded from file system, not passed by API",
+      )
     }
 
+    options.verbose &&
+      console.log(`Use worker pool of size ${options.workersOptions.poolSize}`)
+
+    const pool = createExtractExperimentalWorkerPool({
+      poolSize: options.workersOptions.poolSize,
+    })
+
+    try {
+      await Promise.all(
+        resolvedChunks.map(async ({ filePath, entryPoints }) => {
+          const { messages, success } = await pool.run(
+            resolvedConfigPath,
+            filePath,
+          )
+
+          if (!success) {
+            commandSuccess = false
+          }
+
+          for (const entryPoint of entryPoints) {
+            if (!messagesByEntry.has(entryPoint)) {
+              messagesByEntry.set(entryPoint, {})
+            }
+
+            messages.forEach((message) => {
+              mergeExtractedMessage(
+                message,
+                messagesByEntry.get(entryPoint)!,
+                linguiConfig,
+              )
+            })
+          }
+        }),
+      )
+    } finally {
+      await pool.destroy()
+    }
+  } else {
+    await Promise.all(
+      resolvedChunks.map(async ({ filePath, entryPoints }) => {
+        const { messages, success } = await extractFromChunk(
+          filePath,
+          linguiConfig,
+        )
+
+        if (!success) {
+          commandSuccess = false
+        }
+
+        for (const entryPoint of entryPoints) {
+          if (!messagesByEntry.has(entryPoint)) {
+            messagesByEntry.set(entryPoint, {})
+          }
+
+          messages.forEach((message) => {
+            mergeExtractedMessage(
+              message,
+              messagesByEntry.get(entryPoint)!,
+              linguiConfig,
+            )
+          })
+        }
+      }),
+    )
+  }
+  spinner.succeed(`Extracting done (${ms(Date.now() - phaseStart)})`)
+
+  // Phase: Write catalogs per entry point
+  spinner.start("Writing catalogs...")
+  phaseStart = Date.now()
+  const format = await getFormat(linguiConfig.format, linguiConfig.sourceLocale)
+  const locales = options.locales || linguiConfig.locales
+
+  for (const [entryPoint, messages] of messagesByEntry) {
+    let stat: string
+
     if (options.template) {
-      output = (
+      stat = (
         await writeTemplate({
           linguiConfig,
-          clean: options.clean,
+          clean: options.clean || false,
           format,
           messages,
           entryPoint,
-          outputPattern: config.output,
+          outputPattern: extractorConfig.output,
         })
       ).statMessage
     } else {
-      output = (
+      stat = (
         await writeCatalogs({
-          locales: options.locales || linguiConfig.locales,
+          locales,
           linguiConfig,
-          clean: options.clean,
+          clean: options.clean || false,
           format,
           messages,
           entryPoint,
-          overwrite: options.overwrite,
-          outputPattern: config.output,
+          overwrite: options.overwrite || false,
+          outputPattern: extractorConfig.output,
         })
       ).statMessage
     }
 
     stats.push({
       entry: normalizePath(nodepath.relative(linguiConfig.rootDir, entryPoint)),
-      content: output,
+      content: stat,
     })
   }
+  spinner.succeed(`Writing catalogs done (${ms(Date.now() - phaseStart)})`)
 
   // cleanup temp directory
   await fs.rm(tempDir, { recursive: true, force: true })
 
-  stats.forEach(({ entry, content }) => {
-    console.log([`Catalog statistics for ${entry}:`, content, ""].join("\n"))
-  })
+  stats
+    .sort((a, b) => a.entry.localeCompare(b.entry))
+    .forEach(({ entry, content }) => {
+      console.log([`Catalog statistics for ${entry}:`, content, ""].join("\n"))
+    })
+
+  const totalTime = Date.now() - startTime
+  if (commandSuccess) {
+    console.log(
+      styleText(
+        "green",
+        `Extraction completed successfully in ${ms(totalTime)}`,
+      ),
+    )
+  } else {
+    console.log(
+      styleText("red", `Extraction completed with errors in ${ms(totalTime)}`),
+    )
+  }
 
   return commandSuccess
 }
 
-type CliOptions = {
+type CliArgs = {
   config?: string
   verbose?: boolean
   template?: boolean
   locale?: string
   overwrite?: boolean
   clean?: boolean
+  workers?: number
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   program
     .option("--config <path>", "Path to the config file")
     .option("--template", "Extract to template")
@@ -174,9 +289,13 @@ if (require.main === module) {
     .option("--clean", "Remove obsolete translations")
     .option("--locale <locale, [...]>", "Only extract the specified locales")
     .option("--verbose", "Verbose output")
+    .option(
+      "--workers <n>",
+      "Number of worker threads to use (default: CPU count - 1, capped at 8). Pass `--workers 1` to disable worker threads and run everything in a single process",
+    )
     .parse(process.argv)
 
-  const options = program.opts<CliOptions>()
+  const options = program.opts<CliArgs>()
 
   const config = getConfig({
     configPath: options.config,
@@ -188,6 +307,7 @@ if (require.main === module) {
     locales: options.locale?.split(","),
     overwrite: options.overwrite,
     clean: options.clean,
+    workersOptions: resolveWorkersOptions(options),
   }).then(() => {
     if (!result) process.exit(1)
   })

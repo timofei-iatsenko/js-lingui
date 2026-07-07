@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`Macro is used in expression assignment 1`] = `
 import { plural } from "@lingui/core/macro";
@@ -11,14 +11,14 @@ const a = plural(count, {
 
 import { i18n as _i18n } from "@lingui/core";
 const a = _i18n._(
-  /*i18n*/
+  /** i18n */
   {
     id: "esnaQO",
     message: "{count, plural, one {# book} other {# books}}",
     values: {
       count: count,
     },
-  }
+  },
 );
 
 `;
@@ -36,7 +36,7 @@ plural(users.length, {
 
 import { i18n as _i18n } from "@lingui/core";
 _i18n._(
-  /*i18n*/
+  /** i18n */
   {
     id: "0mcXIe",
     message:
@@ -45,7 +45,7 @@ _i18n._(
       0: users.length,
       someOtherExp: someOtherExp,
     },
-  }
+  },
 );
 
 `;
@@ -57,21 +57,21 @@ const a = plural(
   {
     one: \`# book\`,
     other: "# books",
-  }
+  },
 );
 
 ↓ ↓ ↓ ↓ ↓ ↓
 
 import { i18n as _i18n } from "@lingui/core";
 const a = _i18n._(
-  /*i18n*/
+  /** i18n */
   {
     id: "esnaQO",
     message: "{count, plural, one {# book} other {# books}}",
     values: {
       count: getCount(),
     },
-  }
+  },
 );
 
 `;
@@ -87,14 +87,14 @@ const a = plural(ph({ count: getCount() }), {
 
 import { i18n as _i18n } from "@lingui/core";
 const a = _i18n._(
-  /*i18n*/
+  /** i18n */
   {
     id: "esnaQO",
     message: "{count, plural, one {# book} other {# books}}",
     values: {
       count: getCount(),
     },
-  }
+  },
 );
 
 `;
@@ -110,14 +110,14 @@ const a = plural({ count: getCount() } as any, {
 
 import { i18n as _i18n } from "@lingui/core";
 const a = _i18n._(
-  /*i18n*/
+  /** i18n */
   {
     id: "esnaQO",
     message: "{count, plural, one {# book} other {# books}}",
     values: {
       count: getCount(),
     },
-  }
+  },
 );
 
 `;
@@ -135,14 +135,14 @@ plural(users.length, {
 
 import { i18n as _i18n } from "@lingui/core";
 _i18n._(
-  /*i18n*/
+  /** i18n */
   {
-    id: "CF5t+7",
+    id: "CF5t-7",
     message: "{0, plural, offset:1 =0 {No books} =1 {1 book} other {# books}}",
     values: {
       0: users.length,
     },
-  }
+  },
 );
 
 `;
@@ -158,14 +158,14 @@ const a = plural2(count, {
 
 import { i18n as _i18n } from "@lingui/core";
 const a = _i18n._(
-  /*i18n*/
+  /** i18n */
   {
     id: "esnaQO",
     message: "{count, plural, one {# book} other {# books}}",
     values: {
       count: count,
     },
-  }
+  },
 );
 
 `;
