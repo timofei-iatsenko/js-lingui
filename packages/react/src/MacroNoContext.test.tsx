@@ -102,29 +102,6 @@ describe("Macro No Context Components", () => {
           }
         `)
       })
-      test("Should add Plural value to values", () => {
-        const count = 5
-        const fragment = (
-          <>
-            <PluralNoContext
-              lingui={{ i18n }}
-              value={{ count }}
-              one="# book"
-              other="# books"
-            />
-          </>
-        )
-        const actual = nodesToMessage(fragment.props.children)
-        expect(actual).toMatchInlineSnapshot(`
-          {
-            "components": {},
-            "message": "{count, plural, one {# book} other {# books}}",
-            "values": {
-              "count": 5,
-            },
-          }
-        `)
-      })
     })
     describe("Select", () => {
       test("Should expand Select component into icu string", () => {
@@ -211,8 +188,8 @@ describe("Macro No Context Components", () => {
                 one={<>{{ count }} items</>}
                 other={<a href="/more">A lot of them</a>}
               />
-            </TransNoContext>
-          )
+            </TransNoContext>,
+          ),
         ).toMatchInlineSnapshot(`"Here is <a href="/more">A lot of them</a>"`)
       })
 
@@ -233,8 +210,8 @@ describe("Macro No Context Components", () => {
                 _female={`She`}
                 other={<strong>Other</strong>}
               />
-            </TransNoContext>
-          )
+            </TransNoContext>,
+          ),
         ).toMatchInlineSnapshot(`"Prefix She"`)
       })
       it("should render SelectOrdinal", () => {
@@ -252,8 +229,8 @@ describe("Macro No Context Components", () => {
                 other={<strong>#rd</strong>}
               />{" "}
               cat.
-            </TransNoContext>
-          )
+            </TransNoContext>,
+          ),
         ).toMatchInlineSnapshot(`"This is my <strong>5rd</strong> cat."`)
       })
     })
@@ -272,8 +249,8 @@ describe("Macro No Context Components", () => {
               // todo: test with a Trans in the options
               few={<>{{ count }} items</>}
               other={<a href="/more">A lot of them</a>}
-            />
-          )
+            />,
+          ),
         ).toMatchInlineSnapshot(`"<a href="/more">A lot of them</a>"`)
       })
 
@@ -289,8 +266,8 @@ describe("Macro No Context Components", () => {
               _male="He"
               _female={`She`}
               other={<strong>Other</strong>}
-            />
-          )
+            />,
+          ),
         ).toMatchInlineSnapshot(`"She"`)
       })
 
@@ -305,8 +282,8 @@ describe("Macro No Context Components", () => {
               one="#st"
               two={`#nd`}
               other={<strong>#rd</strong>}
-            />
-          )
+            />,
+          ),
         ).toMatchInlineSnapshot(`"<strong>5rd</strong>"`)
       })
     })

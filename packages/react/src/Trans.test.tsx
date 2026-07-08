@@ -38,8 +38,10 @@ describe("Trans component", () => {
     render(<I18nProvider i18n={i18n}>{node}</I18nProvider>)
   const text = (node: React.ReactNode) =>
     renderWithI18n(node).container.textContent
-  const html = (node: React.ReactNode) =>
-    renderWithI18n(node).container.innerHTML
+  const html = (node: React.ReactNode) => {
+    const tt = renderWithI18n(node)
+    return tt.container.innerHTML
+  }
 
   /*
    * Tests

@@ -18,7 +18,8 @@ export type TransRenderCallbackOrComponent =
   | {
       component?: never
       render?:
-        ((props: TransRenderProps) => React.ReactElement<any, any>) | null
+        | ((props: TransRenderProps) => React.ReactElement<any, any>)
+        | null
     }
   | {
       component?: React.ComponentType<TransRenderProps> | null
@@ -26,7 +27,7 @@ export type TransRenderCallbackOrComponent =
     }
 
 type TransWithChildrenProps = {
-  id?: string
+  id?: MessageId
   context?: string
   children: React.ReactNode
 }
@@ -41,28 +42,32 @@ type TransWithMessageProps = {
 export type TransProps = {
   formats?: MessageOptions["formats"]
   comment?: string
-} & TransWithChildrenProps &
+} & (TransWithChildrenProps | TransWithMessageProps) &
   TransRenderCallbackOrComponent
 
 export function TransNoContext(
   props: TransProps & {
     lingui: LinguiContextLike
-  }
+  },
 ): React.ReactElement<any, any> | null {
-  const { children, id, context, ...restProps } = props
-  const { values, message, components } = nodesToMessage(children)
+  if ("children" in props) {
+    const { children, id, context, ...restProps } = props
+    const { values, message, components } = nodesToMessage(children)
 
-  return (
-    <TransWithMessageNoContext
-      {...{
-        ...restProps,
-        values,
-        message,
-        components,
-        id: id || generateMessageId(message, context),
-      }}
-    />
-  )
+    return (
+      <TransWithMessageNoContext
+        {...{
+          ...restProps,
+          values,
+          message,
+          components,
+          id: id || generateMessageId(message, context),
+        }}
+      />
+    )
+  }
+
+  return <TransWithMessageNoContext {...props} />
 }
 
 /**
@@ -75,12 +80,9 @@ function TransWithMessageNoContext(
   props: {
     formats?: MessageOptions["formats"]
     comment?: string
-    lingui: {
-      i18n: I18n
-      defaultComponent?: ComponentType<TransRenderProps>
-    }
+    lingui: LinguiContextLike
   } & TransWithMessageProps &
-    TransRenderCallbackOrComponent
+    TransRenderCallbackOrComponent,
 ): React.ReactElement<any, any> | null {
   const {
     render,
