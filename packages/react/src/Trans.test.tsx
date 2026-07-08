@@ -115,13 +115,13 @@ describe("Trans component", () => {
       expect(() => render(<Trans id="unknown" />))
         .toThrowErrorMatchingInlineSnapshot(`
           [Error: Trans component was rendered without I18nProvider.
-          Attempted to render message: undefined id: unknown. Make sure this component is rendered inside a I18nProvider.]
+          Make sure this component is rendered inside a I18nProvider.]
         `)
       expect(() =>
         render(<Trans id="unknown" message={"some valid message"} />),
       ).toThrowErrorMatchingInlineSnapshot(`
         [Error: Trans component was rendered without I18nProvider.
-        Attempted to render message: some valid message id: unknown. Make sure this component is rendered inside a I18nProvider.]
+        Make sure this component is rendered inside a I18nProvider.]
       `)
 
       console.error = originalConsole
@@ -400,7 +400,7 @@ describe("Trans component", () => {
         }}
       />,
     )
-    expect(translation).toEqual("1,00 €")
+    expect(translation).toEqual("1,00 €")
   })
 
   it("should render plural", () => {

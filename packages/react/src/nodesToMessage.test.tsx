@@ -1,6 +1,6 @@
 import { nodesToMessage } from "./nodesToMessage"
 import React, { PropsWithChildren } from "react"
-import { getConsoleMockCalls, mockConsole } from "@lingui/jest-mocks"
+import { getConsoleMockCalls, mockConsole } from "@lingui/test-utils"
 import { generateMessageId } from "@lingui/message-utils/generateMessageId"
 import { setLinguiToMessageFn } from "./meta-utils"
 
@@ -116,7 +116,7 @@ describe("trans nodesToMessage", () => {
       const actual = nodesToMessage(fragment.props.children)
 
       expect(getConsoleMockCalls(console.warn)).toMatchInlineSnapshot(
-        `"Trans: the passed in object contained more than one variable - the object should look like {{ value }}."`
+        `"Trans: the passed in object contained more than one variable - the object should look like {{ value }}."`,
       )
 
       expect(actual).toMatchInlineSnapshot(`
@@ -191,7 +191,7 @@ describe("trans nodesToMessage", () => {
       const fragment = <>lorem {variable} ipsum</>
       const actual = nodesToMessage(fragment.props.children)
       expect(getConsoleMockCalls(console.warn)).toMatchInlineSnapshot(
-        `"Trans: the passed in value is invalid - seems you passed in a variable like {number} - please pass in variables for interpolation as full objects like {{number}}."`
+        `"Trans: the passed in value is invalid - seems you passed in a variable like {number} - please pass in variables for interpolation as full objects like {{number}}."`,
       )
 
       expect(actual).toMatchInlineSnapshot(`
@@ -210,7 +210,7 @@ describe("trans nodesToMessage", () => {
       const fragment = <>lorem {variable} ipsum</>
       const actual = nodesToMessage(fragment.props.children)
       expect(getConsoleMockCalls(console.warn)).toMatchInlineSnapshot(
-        `"Trans: the passed in value is invalid - seems you passed in a null child."`
+        `"Trans: the passed in value is invalid - seems you passed in a null child."`,
       )
 
       expect(actual).toMatchInlineSnapshot(`
@@ -277,6 +277,7 @@ describe("Macro compatibility", () => {
 
     const actual = nodesToMessage(fragment.props.children)
     const messageId = generateMessageId(actual.message)
+    /* eslint-disable no-irregular-whitespace */
     expect({
       id: messageId,
       ...actual,
@@ -285,11 +286,12 @@ describe("Macro compatibility", () => {
         "components": {
           "0": <Text />,
         },
-        "id": "K/1Xpr",
+        "id": "K_1Xpr",
         "message": "<0>This should work  </0>",
         "values": {},
       }
     `)
+    /* eslint-enable no-irregular-whitespace */
   })
 })
 
